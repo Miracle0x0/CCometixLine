@@ -25,6 +25,28 @@ pub fn model_segment() -> SegmentConfig {
     }
 }
 
+pub fn effort_segment() -> SegmentConfig {
+    SegmentConfig {
+        id: SegmentId::Effort,
+        enabled: true,
+        icon: IconConfig {
+            plain: "effort".to_string(),
+            nerd_font: "\u{f5dc}".to_string(),
+        },
+        colors: ColorConfig {
+            icon: Some(AnsiColor::Rgb { r: 0, g: 0, b: 0 }),
+            text: Some(AnsiColor::Rgb { r: 0, g: 0, b: 0 }),
+            background: Some(AnsiColor::Rgb {
+                r: 135,
+                g: 206,
+                b: 235,
+            }),
+        },
+        styles: TextStyleConfig::default(),
+        options: HashMap::new(),
+    }
+}
+
 pub fn directory_segment() -> SegmentConfig {
     SegmentConfig {
         id: SegmentId::Directory,

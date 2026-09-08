@@ -72,16 +72,7 @@ impl App {
         }
 
         // Load config
-        let mut config = Config::load().unwrap_or_else(|_| Config::default());
-
-        // If a theme is specified, reload it to get the latest changes
-        if !config.theme.is_empty() && config.theme != "default" {
-            if let Ok(theme_config) =
-                crate::ui::themes::ThemePresets::load_theme_from_file(&config.theme)
-            {
-                config = theme_config;
-            }
-        }
+        let config = Config::load()?;
 
         // Terminal setup
         enable_raw_mode()?;
@@ -498,6 +489,7 @@ impl App {
                     segment.enabled = !segment.enabled;
                     let segment_name = match segment.id {
                         SegmentId::Model => "Model",
+                        SegmentId::Effort => "Effort",
                         SegmentId::Directory => "Directory",
                         SegmentId::Git => "Git",
                         SegmentId::ContextWindow => "Context Window",
@@ -525,6 +517,7 @@ impl App {
                             segment.enabled = !segment.enabled;
                             let segment_name = match segment.id {
                                 SegmentId::Model => "Model",
+                                SegmentId::Effort => "Effort",
                                 SegmentId::Directory => "Directory",
                                 SegmentId::Git => "Git",
                                 SegmentId::ContextWindow => "Context Window",
@@ -705,5 +698,105 @@ impl App {
     fn open_separator_editor(&mut self) {
         self.status_message = Some("Opening separator editor...".to_string());
         self.separator_editor.open(&self.config.style.separator);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::AnsiColor;
+    use crate::ui::themes::ThemePresets;
+    use ratatui::backend::TestBackend;
+
+    fn screen(app: &mut App, width: u16, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| app.ui(f)).unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect()
+    }
+
+    #[test]
+    fn effort_toggle_updates_preview_and_is_preserved_when_reopened() {
+        let mut app = App::new(ThemePresets::get_cometix());
+        app.selected_segment = 1;
+        let rendered = screen(&mut app, 120, 40);
+        assert!(rendered.contains("Effort"));
+        assert!(app.preview.get_preview_cache().contains("high"));
+
+        app.toggle_current();
+        assert!(!app.config.segments[1].enabled);
+        assert!(app.config.segments[0].enabled);
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("Effort segment disabled")
+        );
+        assert!(!app.preview.get_preview_cache().contains("high"));
+
+        let saved = toml::to_string_pretty(&app.config).unwrap();
+        let mut reopened = App::new(toml::from_str(&saved).unwrap());
+        reopened.selected_segment = 1;
+        assert!(!reopened.config.segments[1].enabled);
+        reopened.switch_panel();
+        reopened.toggle_current();
+        assert!(reopened.config.segments[1].enabled);
+        assert!(reopened.preview.get_preview_cache().contains("high"));
+    }
+
+    #[test]
+    fn effort_reordering_and_style_editing_use_existing_controls() {
+        let mut app = App::new(ThemePresets::get_default());
+        app.selected_segment = 1;
+        app.move_segment_down();
+        assert_eq!(app.selected_segment, 2);
+        assert_eq!(app.config.segments[2].id, SegmentId::Effort);
+        app.move_segment_up();
+        assert_eq!(app.config.segments[1].id, SegmentId::Effort);
+
+        app.switch_panel();
+        app.selected_field = FieldSelection::Icon;
+        app.apply_selected_icon("E".to_string());
+        app.selected_field = FieldSelection::TextColor;
+        app.apply_selected_color(AnsiColor::Color16 { c16: 3 });
+        let rendered = screen(&mut app, 80, 32);
+        assert!(rendered.contains("Effort"));
+        assert!(rendered.contains("E high"));
+        assert_eq!(
+            app.config.segments[1].colors.text,
+            Some(AnsiColor::Color16 { c16: 3 })
+        );
+    }
+
+    #[test]
+    fn selected_effort_remains_visible_after_moving_below_viewport() {
+        let mut app = App::new(ThemePresets::get_default());
+        app.selected_segment = 1;
+        while app.selected_segment + 1 < app.config.segments.len() {
+            app.move_segment_down();
+        }
+        let mut terminal = Terminal::new(TestBackend::new(30, 5)).unwrap();
+        terminal
+            .draw(|f| {
+                app.segment_list.render(
+                    f,
+                    f.area(),
+                    &app.config,
+                    app.selected_segment,
+                    &app.selected_panel,
+                )
+            })
+            .unwrap();
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(rendered.contains("Effort"));
     }
 }

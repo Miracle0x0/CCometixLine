@@ -130,6 +130,7 @@ impl ThemePresets {
             },
             segments: vec![
                 theme_cometix::model_segment(),
+                theme_cometix::effort_segment(),
                 theme_cometix::directory_segment(),
                 theme_cometix::git_segment(),
                 theme_cometix::context_window_segment(),
@@ -150,6 +151,7 @@ impl ThemePresets {
             },
             segments: vec![
                 theme_default::model_segment(),
+                theme_default::effort_segment(),
                 theme_default::directory_segment(),
                 theme_default::git_segment(),
                 theme_default::context_window_segment(),
@@ -170,6 +172,7 @@ impl ThemePresets {
             },
             segments: vec![
                 theme_minimal::model_segment(),
+                theme_minimal::effort_segment(),
                 theme_minimal::directory_segment(),
                 theme_minimal::git_segment(),
                 theme_minimal::context_window_segment(),
@@ -190,6 +193,7 @@ impl ThemePresets {
             },
             segments: vec![
                 theme_gruvbox::model_segment(),
+                theme_gruvbox::effort_segment(),
                 theme_gruvbox::directory_segment(),
                 theme_gruvbox::git_segment(),
                 theme_gruvbox::context_window_segment(),
@@ -210,6 +214,7 @@ impl ThemePresets {
             },
             segments: vec![
                 theme_nord::model_segment(),
+                theme_nord::effort_segment(),
                 theme_nord::directory_segment(),
                 theme_nord::git_segment(),
                 theme_nord::context_window_segment(),
@@ -230,6 +235,7 @@ impl ThemePresets {
             },
             segments: vec![
                 theme_powerline_dark::model_segment(),
+                theme_powerline_dark::effort_segment(),
                 theme_powerline_dark::directory_segment(),
                 theme_powerline_dark::git_segment(),
                 theme_powerline_dark::context_window_segment(),
@@ -250,6 +256,7 @@ impl ThemePresets {
             },
             segments: vec![
                 theme_powerline_light::model_segment(),
+                theme_powerline_light::effort_segment(),
                 theme_powerline_light::directory_segment(),
                 theme_powerline_light::git_segment(),
                 theme_powerline_light::context_window_segment(),
@@ -270,6 +277,7 @@ impl ThemePresets {
             },
             segments: vec![
                 theme_powerline_rose_pine::model_segment(),
+                theme_powerline_rose_pine::effort_segment(),
                 theme_powerline_rose_pine::directory_segment(),
                 theme_powerline_rose_pine::git_segment(),
                 theme_powerline_rose_pine::context_window_segment(),
@@ -290,6 +298,7 @@ impl ThemePresets {
             },
             segments: vec![
                 theme_powerline_tokyo_night::model_segment(),
+                theme_powerline_tokyo_night::effort_segment(),
                 theme_powerline_tokyo_night::directory_segment(),
                 theme_powerline_tokyo_night::git_segment(),
                 theme_powerline_tokyo_night::context_window_segment(),
@@ -299,6 +308,43 @@ impl ThemePresets {
                 theme_powerline_tokyo_night::output_style_segment(),
             ],
             theme: "powerline-tokyo-night".to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::SegmentId;
+
+    #[test]
+    fn every_builtin_theme_has_an_independent_effort_segment_after_model() {
+        for config in [
+            ThemePresets::get_cometix(),
+            ThemePresets::get_default(),
+            ThemePresets::get_minimal(),
+            ThemePresets::get_gruvbox(),
+            ThemePresets::get_nord(),
+            ThemePresets::get_powerline_dark(),
+            ThemePresets::get_powerline_light(),
+            ThemePresets::get_powerline_rose_pine(),
+            ThemePresets::get_powerline_tokyo_night(),
+        ] {
+            config.check().unwrap();
+            let mut restored: Config =
+                toml::from_str(&toml::to_string_pretty(&config).unwrap()).unwrap();
+            let model = restored
+                .segments
+                .iter()
+                .position(|s| s.id == SegmentId::Model)
+                .unwrap();
+            let effort = &mut restored.segments[model + 1];
+            assert_eq!(effort.id, SegmentId::Effort, "{}", config.theme);
+            assert!(effort.enabled);
+            assert_eq!(effort.icon.plain, "effort");
+            assert!(!effort.icon.nerd_font.is_empty());
+            effort.enabled = false;
+            assert!(restored.segments[model].enabled);
         }
     }
 }

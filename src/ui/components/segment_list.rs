@@ -3,7 +3,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{Block, Borders, List, ListItem, ListState},
     Frame,
 };
 
@@ -49,6 +49,7 @@ impl SegmentListComponent {
                 let enabled_marker = if segment.enabled { "●" } else { "○" };
                 let segment_name = match segment.id {
                     SegmentId::Model => "Model",
+                    SegmentId::Effort => "Effort",
                     SegmentId::Directory => "Directory",
                     SegmentId::Git => "Git",
                     SegmentId::ContextWindow => "Context Window",
@@ -80,6 +81,7 @@ impl SegmentListComponent {
                 Style::default()
             });
         let segments_list = List::new(items).block(segments_block);
-        f.render_widget(segments_list, area);
+        let mut state = ListState::default().with_selected(Some(selected_segment));
+        f.render_stateful_widget(segments_list, area, &mut state);
     }
 }

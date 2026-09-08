@@ -104,6 +104,11 @@ impl PreviewComponent {
                         map
                     },
                 },
+                SegmentId::Effort => SegmentData {
+                    primary: "high".to_string(),
+                    secondary: String::new(),
+                    metadata: HashMap::new(),
+                },
                 SegmentId::Directory => SegmentData {
                     primary: "CCometixLine".to_string(),
                     secondary: "".to_string(),

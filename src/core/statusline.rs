@@ -472,6 +472,10 @@ pub fn collect_all_segments(
                 let segment = ModelSegment::new();
                 segment.collect(input)
             }
+            crate::config::SegmentId::Effort => {
+                let segment = EffortSegment::new();
+                segment.collect(input)
+            }
             crate::config::SegmentId::Directory => {
                 let segment = DirectorySegment::new();
                 segment.collect(input)

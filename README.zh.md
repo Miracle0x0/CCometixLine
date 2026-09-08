@@ -18,6 +18,7 @@
 ### 核心功能
 - **Git 集成** 显示分支、状态和跟踪信息
 - **模型显示** 简化的 Claude 模型名称
+- **思考强度显示** 显示当前推理工作量档位，支持独立开关
 - **使用量跟踪** 基于转录文件分析  
 - **目录显示** 显示当前工作空间
 - **简洁设计** 使用 Nerd Font 图标
@@ -195,7 +196,7 @@ ccline --patch ~/.local/share/fnm/node-versions/v24.4.1/installation/lib/node_mo
 
 ## 默认段落
 
-显示：`目录 | Git 分支状态 | 模型 | 上下文窗口`
+显示：`模型 | Effort | 目录 | Git 分支状态 | 上下文窗口`
 
 ### Git 状态指示器
 
@@ -212,6 +213,10 @@ ccline --patch ~/.local/share/fnm/node-versions/v24.4.1/installation/lib/node_mo
 ### 上下文窗口显示
 
 基于转录文件分析的令牌使用百分比，包含上下文限制跟踪。
+
+### 思考强度显示
+
+显示 Claude Code 报告的当前推理工作量档位，例如 `low`、`medium`、`high`、`xhigh` 或 `max`。要求 Claude Code 2.1.119 或更新版本；输入没有 `effort` 字段时省略该段落。所有内置主题默认在 Model 后启用 Effort。
 
 ## 配置
 
@@ -230,7 +235,25 @@ CCometixLine 支持通过 TOML 文件和交互式 TUI 进行完整配置：
 - 颜色自定义
 - 格式选项
 
-支持的段落：目录、Git、模型、使用量、时间、成本、输出样式
+支持的段落：目录、Git、模型、Effort、上下文窗口、使用量、会话、成本、输出样式、更新
+
+### Effort 配置
+
+运行 `ccline --config`，在段落列表中选中 **Effort**，按 **Enter** 独立切换显示状态，不影响 Model。按 **Tab** 编辑图标、颜色、背景和文字样式，按 **Shift+上/下方向键** 调整顺序，按 **S** 保存到 `config.toml`。预览随编辑实时更新。**W** 将配置写入当前主题文件，用于通过 `--theme` 指定主题的情况。
+
+如果当前配置没有 Effort 段落，在打开 TUI 前将以下条目加入 `~/.claude/ccline/config.toml`；使用 `--theme` 时则加入对应主题的 TOML 文件。更新二进制不会自动向已有配置和主题文件补入段落。
+
+```toml
+[[segments]]
+id = "effort"
+enabled = true
+icon = { plain = "effort", nerd_font = "\uf5dc" }
+colors = { icon = { c16 = 14 }, text = { c16 = 14 } }
+styles = { text_bold = false }
+options = {}
+```
+
+设置 `enabled = false` 即可隐藏 Effort。显示值直接来自状态栏输入的 `effort.level`，不会根据模型名、思考开关或 token 用量推断。
 
 ### 模型配置 (`models.toml`)
 

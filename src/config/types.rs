@@ -65,6 +65,7 @@ pub enum AnsiColor {
 #[serde(rename_all = "snake_case")]
 pub enum SegmentId {
     Model,
+    Effort,
     Directory,
     Git,
     ContextWindow,
@@ -111,8 +112,14 @@ pub struct OutputStyle {
 }
 
 #[derive(Deserialize)]
+pub struct Effort {
+    pub level: String,
+}
+
+#[derive(Deserialize)]
 pub struct InputData {
     pub model: Model,
+    pub effort: Option<Effort>,
     pub workspace: Workspace,
     pub transcript_path: String,
     pub cost: Option<Cost>,

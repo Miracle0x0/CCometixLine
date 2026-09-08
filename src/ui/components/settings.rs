@@ -28,6 +28,7 @@ impl SettingsComponent {
         if let Some(segment) = config.segments.get(selected_segment) {
             let segment_name = match segment.id {
                 SegmentId::Model => "Model",
+                SegmentId::Effort => "Effort",
                 SegmentId::Directory => "Directory",
                 SegmentId::Git => "Git",
                 SegmentId::ContextWindow => "Context Window",

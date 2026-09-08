@@ -18,6 +18,7 @@ The statusline shows: Model | Directory | Git Branch Status | Context Window Inf
 ### Core Functionality
 - **Git integration** with branch, status, and tracking info  
 - **Model display** with simplified Claude model names
+- **Effort display** with an independent toggle for the current reasoning effort level
 - **Usage tracking** based on transcript analysis
 - **Directory display** showing current workspace
 - **Minimal design** using Nerd Font icons
@@ -203,7 +204,7 @@ ccline --patch ~/.local/share/fnm/node-versions/v24.4.1/installation/lib/node_mo
 
 ## Default Segments
 
-Displays: `Directory | Git Branch Status | Model | Context Window`
+Displays: `Model | Effort | Directory | Git Branch Status | Context Window`
 
 ### Git Status Indicators
 
@@ -220,6 +221,10 @@ Shows simplified Claude model names:
 ### Context Window Display
 
 Token usage percentage based on transcript analysis with context limit tracking.
+
+### Effort Display
+
+Shows the current reasoning effort level reported by Claude Code, such as `low`, `medium`, `high`, `xhigh`, or `max`. Requires Claude Code 2.1.119 or later. The segment is omitted when the input has no `effort` field. All built-in themes enable Effort after Model.
 
 ## Configuration
 
@@ -238,7 +243,25 @@ All segments are configurable with:
 - Color customization
 - Format options
 
-Supported segments: Directory, Git, Model, Usage, Time, Cost, OutputStyle
+Supported segments: Directory, Git, Model, Effort, Context Window, Usage, Session, Cost, Output Style, Update
+
+### Effort Configuration
+
+Run `ccline --config`, select **Effort** in the segment list, and press **Enter** to toggle it independently of Model. Use **Tab** to edit its icon, colors, background, and text style, **Shift+Up/Down** to reorder it, and **S** to save `config.toml`. The preview updates as you edit. **W** writes to the current theme file, which is used when launching with `--theme`.
+
+If your configuration does not contain an Effort segment, add this entry to `~/.claude/ccline/config.toml` before opening the TUI. For `--theme` overrides, add it to that theme's TOML file instead. Existing configuration and theme files are not automatically extended when the binary is updated.
+
+```toml
+[[segments]]
+id = "effort"
+enabled = true
+icon = { plain = "effort", nerd_font = "\uf5dc" }
+colors = { icon = { c16 = 14 }, text = { c16 = 14 } }
+styles = { text_bold = false }
+options = {}
+```
+
+Set `enabled = false` to hide Effort. The value comes directly from the statusline input's `effort.level`; ccline does not infer it from model names, thinking settings, or token usage.
 
 ### Model Configuration (`models.toml`)
 

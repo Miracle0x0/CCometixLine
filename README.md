@@ -249,14 +249,14 @@ Supported segments: Directory, Git, Model, Effort, Context Window, Usage, Sessio
 
 Run `ccline --config`, select **Effort** in the segment list, and press **Enter** to toggle it independently of Model. Use **Tab** to edit its icon, colors, background, and text style, **Shift+Up/Down** to reorder it, and **S** to save `config.toml`. The preview updates as you edit. **W** writes to the current theme file, which is used when launching with `--theme`.
 
-If your configuration does not contain an Effort segment, add this entry to `~/.claude/ccline/config.toml` before opening the TUI. For `--theme` overrides, add it to that theme's TOML file instead. Existing configuration and theme files are not automatically extended when the binary is updated.
+If your configuration or selected theme does not contain Effort, the TUI presents it as a disabled option after Model (or at the end when Model is absent). Effort uses a lightning icon and its own purple palette for the selected built-in theme; custom themes use the default Effort appearance. Press **Enter** to enable it, then **S** to save the configuration or **W** to write the current theme. The added Effort option is written only when you save. You can also configure the segment directly in `config.toml` or a theme file:
 
 ```toml
 [[segments]]
 id = "effort"
 enabled = true
-icon = { plain = "effort", nerd_font = "\uf5dc" }
-colors = { icon = { c16 = 14 }, text = { c16 = 14 } }
+icon = { plain = "⚡", nerd_font = "\uf0e7" }
+colors = { icon = { c16 = 13 }, text = { c16 = 13 } }
 styles = { text_bold = false }
 options = {}
 ```

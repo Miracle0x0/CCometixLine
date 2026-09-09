@@ -44,6 +44,7 @@ pub struct App {
 
 impl App {
     pub fn new(config: Config) -> Self {
+        let config = Self::with_effort_option(config);
         let mut app = Self {
             config: config.clone(),
             selected_segment: 0,
@@ -63,6 +64,27 @@ impl App {
         };
         app.preview.update_preview(&config);
         app
+    }
+
+    /// Expose Effort in the editor even when it is absent from the saved layout.
+    /// An omitted segment is disabled; only an explicit save writes the entry.
+    fn with_effort_option(mut config: Config) -> Config {
+        if config.segments.iter().any(|s| s.id == SegmentId::Effort) {
+            return config;
+        }
+
+        let mut effort = crate::ui::themes::ThemePresets::effort_segment(&config.theme);
+        effort.enabled = false;
+        if let Some(index) = config
+            .segments
+            .iter()
+            .position(|s| s.id == SegmentId::Model)
+        {
+            config.segments.insert(index + 1, effort);
+        } else {
+            config.segments.push(effort);
+        }
+        config
     }
 
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -622,7 +644,8 @@ impl App {
     }
 
     fn switch_to_theme(&mut self, theme_name: &str) {
-        self.config = crate::ui::themes::ThemePresets::get_theme(theme_name);
+        self.config =
+            Self::with_effort_option(crate::ui::themes::ThemePresets::get_theme(theme_name));
         self.selected_segment = 0;
         self.preview.update_preview(&self.config);
         self.status_message = Some(format!("Switched to {} theme", theme_name));
@@ -631,7 +654,8 @@ impl App {
     /// Reset current theme to its default configuration
     fn reset_to_theme_defaults(&mut self) {
         let current_theme = self.config.theme.clone();
-        self.config = crate::ui::themes::ThemePresets::get_theme(&current_theme);
+        self.config =
+            Self::with_effort_option(crate::ui::themes::ThemePresets::get_theme(&current_theme));
         self.selected_segment = 0;
         self.preview.update_preview(&self.config);
         self.status_message = Some(format!("Reset {} theme to defaults", current_theme));
@@ -718,6 +742,108 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect()
+    }
+
+    #[test]
+    fn config_without_effort_exposes_a_disabled_option_in_the_tui() {
+        let mut config = ThemePresets::get_gruvbox();
+        config.segments.retain(|s| s.id != SegmentId::Effort);
+        let original = toml::to_string_pretty(&config).unwrap();
+        let mut app = App::new(toml::from_str(&original).unwrap());
+
+        let rendered = screen(&mut app, 120, 40);
+        assert!(rendered.contains("Effort"));
+        assert_eq!(app.config.segments[1].id, SegmentId::Effort);
+        assert!(!app.config.segments[1].enabled);
+        assert!(!app.preview.get_preview_cache().contains("high"));
+
+        let mut unchanged = app.config.clone();
+        unchanged.segments.retain(|s| s.id != SegmentId::Effort);
+        assert_eq!(
+            serde_json::to_value(&unchanged).unwrap(),
+            serde_json::to_value(&config).unwrap()
+        );
+
+        app.selected_segment = 1;
+        app.toggle_current();
+        assert!(app.preview.get_preview_cache().contains("high"));
+        let saved = toml::to_string_pretty(&app.config).unwrap();
+        let reopened = App::new(toml::from_str(&saved).unwrap());
+        assert!(reopened.config.segments[1].enabled);
+        assert_eq!(reopened.config.segments.len(), config.segments.len() + 1);
+    }
+
+    #[test]
+    fn missing_effort_uses_independent_styles_and_preserves_existing_effort() {
+        let mut config = ThemePresets::get_powerline_dark();
+        config.theme = "custom".to_string();
+        config.segments.retain(|s| s.id != SegmentId::Effort);
+        config.segments[0].colors.background = Some(AnsiColor::Rgb {
+            r: 30,
+            g: 40,
+            b: 50,
+        });
+        config.segments[0].styles.text_bold = true;
+        let mut app = App::new(config);
+        assert_ne!(
+            app.config.segments[1].colors.background,
+            app.config.segments[0].colors.background
+        );
+        assert_ne!(
+            app.config.segments[1].colors.text,
+            app.config.segments[0].colors.text
+        );
+        assert!(!app.config.segments[1].styles.text_bold);
+
+        app.selected_segment = 1;
+        app.move_segment_down();
+        app.config.segments[2].icon.plain = "E".to_string();
+        app.config.segments[2].colors.text = Some(AnsiColor::Color16 { c16: 3 });
+        for enabled in [true, false] {
+            app.config.segments[2].enabled = enabled;
+            let saved = toml::to_string_pretty(&app.config).unwrap();
+            let reopened = App::new(toml::from_str(&saved).unwrap());
+            assert_eq!(
+                serde_json::to_value(&reopened.config).unwrap(),
+                serde_json::to_value(&app.config).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn effort_is_available_when_model_is_not_in_the_layout() {
+        let mut config = ThemePresets::get_default();
+        config.segments.retain(|s| s.id == SegmentId::Directory);
+        let mut app = App::new(config);
+        assert_eq!(app.config.segments[1].id, SegmentId::Effort);
+        app.selected_segment = 1;
+        app.toggle_current();
+        assert!(screen(&mut app, 80, 32).contains("high"));
+    }
+
+    #[test]
+    fn switching_and_resetting_a_file_theme_keeps_effort_available() {
+        let mut theme = ThemePresets::get_gruvbox();
+        theme.segments.retain(|s| s.id != SegmentId::Effort);
+        let original = toml::to_string_pretty(&theme).unwrap();
+        let dir = std::env::temp_dir().join(format!("ccline-effort-theme-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("theme.toml");
+        std::fs::write(&path, &original).unwrap();
+        let theme_name = path.with_extension("");
+
+        let mut app = App::new(ThemePresets::get_default());
+        app.switch_to_theme(theme_name.to_str().unwrap());
+        assert_eq!(app.config.segments[1].id, SegmentId::Effort);
+        assert!(!app.config.segments[1].enabled);
+        app.selected_segment = 1;
+        app.toggle_current();
+        app.reset_to_theme_defaults();
+        assert_eq!(app.config.segments[1].id, SegmentId::Effort);
+        assert!(!app.config.segments[1].enabled);
+        assert!(screen(&mut app, 120, 40).contains("Effort"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

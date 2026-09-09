@@ -241,14 +241,14 @@ CCometixLine 支持通过 TOML 文件和交互式 TUI 进行完整配置：
 
 运行 `ccline --config`，在段落列表中选中 **Effort**，按 **Enter** 独立切换显示状态，不影响 Model。按 **Tab** 编辑图标、颜色、背景和文字样式，按 **Shift+上/下方向键** 调整顺序，按 **S** 保存到 `config.toml`。预览随编辑实时更新。**W** 将配置写入当前主题文件，用于通过 `--theme` 指定主题的情况。
 
-如果当前配置没有 Effort 段落，在打开 TUI 前将以下条目加入 `~/.claude/ccline/config.toml`；使用 `--theme` 时则加入对应主题的 TOML 文件。更新二进制不会自动向已有配置和主题文件补入段落。
+如果当前配置或选中的主题没有 Effort，TUI 会在 Model 后显示一个未启用的 Effort 选项；没有 Model 时放在列表末尾。Effort 使用闪电图标和对应内置主题的独立紫色系配色；自定义主题使用默认 Effort 样式。按 **Enter** 启用，再按 **S** 保存配置或 **W** 写入当前主题即可。新增的 Effort 选项只在保存时写入文件。也可以直接在 `config.toml` 或主题文件中配置：
 
 ```toml
 [[segments]]
 id = "effort"
 enabled = true
-icon = { plain = "effort", nerd_font = "\uf5dc" }
-colors = { icon = { c16 = 14 }, text = { c16 = 14 } }
+icon = { plain = "⚡", nerd_font = "\uf0e7" }
+colors = { icon = { c16 = 13 }, text = { c16 = 13 } }
 styles = { text_bold = false }
 options = {}
 ```

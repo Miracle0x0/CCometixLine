@@ -26,12 +26,12 @@ pub fn effort_segment() -> SegmentConfig {
         id: SegmentId::Effort,
         enabled: true,
         icon: IconConfig {
-            plain: "effort".to_string(),
-            nerd_font: "\u{f5dc}".to_string(),
+            plain: "⚡".to_string(),
+            nerd_font: "\u{f0e7}".to_string(),
         },
         colors: ColorConfig {
-            icon: Some(AnsiColor::Color256 { c256: 208 }), // Gruvbox orange
-            text: Some(AnsiColor::Color256 { c256: 208 }),
+            icon: Some(AnsiColor::Color256 { c256: 175 }),
+            text: Some(AnsiColor::Color256 { c256: 175 }),
             background: None,
         },
         styles: TextStyleConfig { text_bold: true },

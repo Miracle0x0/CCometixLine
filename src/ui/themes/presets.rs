@@ -11,6 +11,21 @@ use super::{
 pub struct ThemePresets;
 
 impl ThemePresets {
+    /// Default Effort appearance, independent of the configured Model segment.
+    pub fn effort_segment(theme_name: &str) -> crate::config::SegmentConfig {
+        match theme_name {
+            "cometix" => theme_cometix::effort_segment(),
+            "gruvbox" => theme_gruvbox::effort_segment(),
+            "minimal" => theme_minimal::effort_segment(),
+            "nord" => theme_nord::effort_segment(),
+            "powerline-dark" => theme_powerline_dark::effort_segment(),
+            "powerline-light" => theme_powerline_light::effort_segment(),
+            "powerline-rose-pine" => theme_powerline_rose_pine::effort_segment(),
+            "powerline-tokyo-night" => theme_powerline_tokyo_night::effort_segment(),
+            _ => theme_default::effort_segment(),
+        }
+    }
+
     pub fn get_theme(theme_name: &str) -> Config {
         // First try to load from file
         if let Ok(config) = Self::load_theme_from_file(theme_name) {
@@ -338,11 +353,23 @@ mod tests {
                 .iter()
                 .position(|s| s.id == SegmentId::Model)
                 .unwrap();
+            let model_config = restored.segments[model].clone();
             let effort = &mut restored.segments[model + 1];
             assert_eq!(effort.id, SegmentId::Effort, "{}", config.theme);
             assert!(effort.enabled);
-            assert_eq!(effort.icon.plain, "effort");
-            assert!(!effort.icon.nerd_font.is_empty());
+            assert_eq!(effort.icon.plain, "⚡");
+            assert_eq!(effort.icon.nerd_font, "\u{f0e7}");
+            assert_ne!(effort.icon.plain, model_config.icon.plain);
+            assert_ne!(effort.icon.nerd_font, model_config.icon.nerd_font);
+            assert_ne!(effort.colors.icon, model_config.colors.icon);
+            assert_ne!(effort.colors.text, model_config.colors.text);
+            if model_config.colors.background.is_some() {
+                assert_ne!(effort.colors.background, model_config.colors.background);
+            }
+            assert_eq!(
+                serde_json::to_value(&*effort).unwrap(),
+                serde_json::to_value(ThemePresets::effort_segment(&config.theme)).unwrap()
+            );
             effort.enabled = false;
             assert!(restored.segments[model].enabled);
         }

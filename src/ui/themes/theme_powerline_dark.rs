@@ -38,24 +38,24 @@ pub fn effort_segment() -> SegmentConfig {
         id: SegmentId::Effort,
         enabled: true,
         icon: IconConfig {
-            plain: "effort".to_string(),
-            nerd_font: "\u{f5dc}".to_string(),
+            plain: "⚡".to_string(),
+            nerd_font: "\u{f0e7}".to_string(),
         },
         colors: ColorConfig {
             icon: Some(AnsiColor::Rgb {
-                r: 255,
-                g: 255,
+                r: 233,
+                g: 213,
                 b: 255,
             }),
             text: Some(AnsiColor::Rgb {
-                r: 255,
-                g: 255,
+                r: 233,
+                g: 213,
                 b: 255,
             }),
             background: Some(AnsiColor::Rgb {
-                r: 45,
-                g: 45,
-                b: 45,
+                r: 88,
+                g: 51,
+                b: 131,
             }),
         },
         styles: TextStyleConfig::default(),

@@ -44,7 +44,7 @@ pub struct App {
 
 impl App {
     pub fn new(config: Config) -> Self {
-        let config = Self::with_effort_option(config);
+        let config = Self::with_optional_segments(config);
         let mut app = Self {
             config: config.clone(),
             selected_segment: 0,
@@ -66,23 +66,28 @@ impl App {
         app
     }
 
-    /// Expose Effort in the editor even when it is absent from the saved layout.
-    /// An omitted segment is disabled; only an explicit save writes the entry.
-    fn with_effort_option(mut config: Config) -> Config {
-        if config.segments.iter().any(|s| s.id == SegmentId::Effort) {
-            return config;
+    /// Expose optional segments in the editor without enabling them implicitly.
+    /// Only an explicit save writes newly added entries.
+    fn with_optional_segments(mut config: Config) -> Config {
+        if !config.segments.iter().any(|s| s.id == SegmentId::Effort) {
+            let mut effort = crate::ui::themes::ThemePresets::effort_segment(&config.theme);
+            effort.enabled = false;
+            if let Some(index) = config
+                .segments
+                .iter()
+                .position(|s| s.id == SegmentId::Model)
+            {
+                config.segments.insert(index + 1, effort);
+            } else {
+                config.segments.push(effort);
+            }
         }
-
-        let mut effort = crate::ui::themes::ThemePresets::effort_segment(&config.theme);
-        effort.enabled = false;
-        if let Some(index) = config
-            .segments
-            .iter()
-            .position(|s| s.id == SegmentId::Model)
-        {
-            config.segments.insert(index + 1, effort);
-        } else {
-            config.segments.push(effort);
+        if !config.segments.iter().any(|s| s.id == SegmentId::Agents) {
+            config
+                .segments
+                .push(crate::ui::themes::ThemePresets::agents_segment(
+                    &config.theme,
+                ));
         }
         config
     }
@@ -211,7 +216,7 @@ impl App {
                                         Some(format!("Failed to save config: {}", e));
                                 } else {
                                     app.status_message =
-                                        Some("Configuration saved to config.toml!".to_string());
+                                        Some("Configuration and agent hooks saved.".to_string());
                                 }
                             }
                         }
@@ -374,8 +379,8 @@ impl App {
                 Constraint::Length(3),                     // Title
                 Constraint::Min(3),                        // Preview (dynamic - will recalculate)
                 Constraint::Length(theme_selector_height), // Theme selector (dynamic)
-                Constraint::Min(10),                       // Main content
-                Constraint::Length(help_height),           // Help (dynamic)
+                Constraint::Min(3), // Main content shrinks before the preview
+                Constraint::Length(help_height), // Help (dynamic)
             ])
             .split(f.area());
 
@@ -393,8 +398,8 @@ impl App {
                 Constraint::Length(3),                     // Title
                 Constraint::Length(preview_height),        // Preview (dynamic)
                 Constraint::Length(theme_selector_height), // Theme selector (dynamic)
-                Constraint::Min(10),                       // Main content
-                Constraint::Length(help_height),           // Help (dynamic)
+                Constraint::Min(3), // Main content shrinks before the preview
+                Constraint::Length(help_height), // Help (dynamic)
             ])
             .split(f.area());
 
@@ -512,6 +517,7 @@ impl App {
                     let segment_name = match segment.id {
                         SegmentId::Model => "Model",
                         SegmentId::Effort => "Effort",
+                        SegmentId::Agents => "Agents",
                         SegmentId::Directory => "Directory",
                         SegmentId::Git => "Git",
                         SegmentId::ContextWindow => "Context Window",
@@ -527,6 +533,13 @@ impl App {
                         segment_name,
                         if is_enabled { "enabled" } else { "disabled" }
                     ));
+                    if segment.id == SegmentId::Agents {
+                        self.status_message = Some(format!(
+                            "Agents {}. Press S to {} hooks.",
+                            if is_enabled { "enabled" } else { "disabled" },
+                            if is_enabled { "install" } else { "uninstall" }
+                        ));
+                    }
                     self.preview.update_preview(&self.config);
                 }
             }
@@ -540,6 +553,7 @@ impl App {
                             let segment_name = match segment.id {
                                 SegmentId::Model => "Model",
                                 SegmentId::Effort => "Effort",
+                                SegmentId::Agents => "Agents",
                                 SegmentId::Directory => "Directory",
                                 SegmentId::Git => "Git",
                                 SegmentId::ContextWindow => "Context Window",
@@ -555,6 +569,13 @@ impl App {
                                 segment_name,
                                 if is_enabled { "enabled" } else { "disabled" }
                             ));
+                            if segment.id == SegmentId::Agents {
+                                self.status_message = Some(format!(
+                                    "Agents {}. Press S to {} hooks.",
+                                    if is_enabled { "enabled" } else { "disabled" },
+                                    if is_enabled { "install" } else { "uninstall" }
+                                ));
+                            }
                             self.preview.update_preview(&self.config);
                         }
                     }
@@ -645,7 +666,7 @@ impl App {
 
     fn switch_to_theme(&mut self, theme_name: &str) {
         self.config =
-            Self::with_effort_option(crate::ui::themes::ThemePresets::get_theme(theme_name));
+            Self::with_optional_segments(crate::ui::themes::ThemePresets::get_theme(theme_name));
         self.selected_segment = 0;
         self.preview.update_preview(&self.config);
         self.status_message = Some(format!("Switched to {} theme", theme_name));
@@ -654,14 +675,16 @@ impl App {
     /// Reset current theme to its default configuration
     fn reset_to_theme_defaults(&mut self) {
         let current_theme = self.config.theme.clone();
-        self.config =
-            Self::with_effort_option(crate::ui::themes::ThemePresets::get_theme(&current_theme));
+        self.config = Self::with_optional_segments(crate::ui::themes::ThemePresets::get_theme(
+            &current_theme,
+        ));
         self.selected_segment = 0;
         self.preview.update_preview(&self.config);
         self.status_message = Some(format!("Reset {} theme to defaults", current_theme));
     }
 
     fn save_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        crate::agents::integration::configure(self.config.agents_enabled())?;
         self.config.save()?;
         Ok(())
     }
@@ -742,6 +765,102 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect()
+    }
+
+    #[test]
+    fn agents_is_opt_in_and_both_tui_panels_toggle_and_preview_it() {
+        let mut config = ThemePresets::get_default();
+        config
+            .segments
+            .retain(|segment| segment.id != SegmentId::Agents);
+        let original = serde_json::to_value(&config).unwrap();
+        let mut app = App::new(config);
+        app.selected_segment = app
+            .config
+            .segments
+            .iter()
+            .position(|s| s.id == SegmentId::Agents)
+            .unwrap();
+        assert!(!app.config.agents_enabled());
+        assert!(!app.preview.get_preview_cache().contains("Agents:"));
+        assert!(screen(&mut app, 120, 40).contains("Agents"));
+        let mut unchanged = app.config.clone();
+        unchanged.segments.retain(|s| s.id != SegmentId::Agents);
+        assert_eq!(serde_json::to_value(&unchanged).unwrap(), original);
+        app.toggle_current();
+        assert!(app.config.agents_enabled());
+        assert!(app.preview.get_preview_cache().contains("Agents: 2 active"));
+        assert!(app
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("install hooks"));
+        let saved = toml::to_string_pretty(&app.config).unwrap();
+        let mut reopened = App::new(toml::from_str(&saved).unwrap());
+        assert!(reopened.config.agents_enabled());
+        reopened.selected_segment = app.selected_segment;
+        reopened.switch_panel();
+        reopened.toggle_current();
+        assert!(!reopened.config.agents_enabled());
+        assert!(!reopened.preview.get_preview_cache().contains("Agents:"));
+        assert!(reopened
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("uninstall hooks"));
+    }
+
+    #[test]
+    fn agents_style_reordering_and_theme_switch_use_the_existing_controls() {
+        let mut app = App::new(ThemePresets::get_default());
+        app.selected_segment = app
+            .config
+            .segments
+            .iter()
+            .position(|s| s.id == SegmentId::Agents)
+            .unwrap();
+        app.toggle_current();
+        app.move_segment_up();
+        assert_eq!(
+            app.config.segments[app.selected_segment].id,
+            SegmentId::Agents
+        );
+        app.switch_panel();
+        app.selected_field = FieldSelection::TextColor;
+        app.apply_selected_color(AnsiColor::Color16 { c16: 3 });
+        assert_eq!(
+            app.config.segments[app.selected_segment].colors.text,
+            Some(AnsiColor::Color16 { c16: 3 })
+        );
+        assert!(screen(&mut app, 120, 40).contains("Agents: 2 active"));
+        app.switch_to_theme("minimal");
+        assert!(!app.config.agents_enabled());
+        assert!(app
+            .config
+            .segments
+            .iter()
+            .any(|s| s.id == SegmentId::Agents));
+        app.reset_to_theme_defaults();
+        assert!(!app.config.agents_enabled());
+    }
+
+    #[test]
+    fn agent_preview_is_visible_at_standard_terminal_height() {
+        let mut config = ThemePresets::get_default();
+        for segment in &mut config.segments {
+            segment.enabled = !matches!(segment.id, SegmentId::Agents | SegmentId::Usage);
+        }
+        let mut app = App::new(config);
+        app.selected_segment = app
+            .config
+            .segments
+            .iter()
+            .position(|s| s.id == SegmentId::Agents)
+            .unwrap();
+        app.toggle_current();
+        let rendered = screen(&mut app, 80, 24);
+        assert!(rendered.contains("Agents: 2 active"));
+        assert!(rendered.contains("install hooks"));
     }
 
     #[test]

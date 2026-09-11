@@ -243,7 +243,7 @@ All segments are configurable with:
 - Color customization
 - Format options
 
-Supported segments: Directory, Git, Model, Effort, Context Window, Usage, Session, Cost, Output Style, Update
+Supported segments: Directory, Git, Model, Effort, Agents, Context Window, Usage, Session, Cost, Output Style, Update
 
 ### Effort Configuration
 
@@ -262,6 +262,18 @@ options = {}
 ```
 
 Set `enabled = false` to hide Effort. The value comes directly from the statusline input's `effort.level`; ccline does not infer it from model names, thinking settings, or token usage.
+
+### Subagent Activity
+
+**Agents is disabled by default in every built-in theme.** Run `ccline --config`, select **Agents**, press **Enter** to enable it, then **S** to save. Saving installs the `SessionStart`, `SubagentStart`, `SubagentStop`, and `SessionEnd` command hooks in `~/.claude/settings.json`. If there is no status line configured, it also configures ccline as the status line. An existing status line command is preserved. When no `refreshInterval` is configured, ccline adds a two-second refresh so background activity updates while the main session is idle.
+
+Disable **Agents** and press **S** to uninstall its hooks. Other hooks and settings are preserved. A refresh interval added by ccline is removed on uninstall if it is still unchanged; an existing or subsequently edited interval is preserved. Unsaved edits only affect the preview. **W** and **Ctrl+S** save theme files without changing the hook installation; **S** applies the activity toggle. Configurations and themes without an Agents entry show it as a disabled option in the TUI.
+
+While observed subagents are active, the main status line shows a summary such as `Agents: 2 active · 1 responded · Explore 35s · reviewer 1m20s`. When no subagents are active, or no events have been observed, the entire segment is hidden, including its separator. Use **Tab** to edit the active text color, icon, background, and text style, and **Shift+Up/Down** to reorder the segment. The TUI preview uses example activity even when the current session is idle.
+
+Activity is keyed by session ID and agent ID, with process locking for concurrent hook events. Repeated starts do not increase the count, a resumed agent starts a new elapsed-time measurement, compaction preserves activity, and starting or resuming a session resets that session's observations. Each fresh installation uses a separate state directory under `~/.claude/ccline/agents/`; re-enabling does not reuse records from a previous installation. The installation manifest is `~/.claude/ccline/agents-installation.json`.
+
+The summary reflects [official lifecycle hook events](https://code.claude.com/docs/en/hooks#subagentstart). `responded` means a `SubagentStop` event was observed, not that a task succeeded. These hooks do not reliably distinguish waiting for permission, failure, cancellation, or continuation requested by another stop hook, so the segment uses the configured active color instead of inferring those states. An interruption without an end event cannot be confirmed from this data. Agents that were already running before installation are not reconstructed from transcript files. Malformed state or settings files produce explicit errors.
 
 ### Model Configuration (`models.toml`)
 

@@ -4,6 +4,10 @@ use clap::Parser;
 #[command(name = "ccline")]
 #[command(version, about = "High-performance Claude Code StatusLine")]
 pub struct Cli {
+    /// Record a Claude Code subagent lifecycle hook from stdin
+    #[arg(long, conflicts_with_all = ["config", "theme", "patch"])]
+    pub agents_hook: Option<u128>,
+
     /// Enter TUI configuration mode
     #[arg(short = 'c', long = "config")]
     pub config: bool,

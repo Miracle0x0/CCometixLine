@@ -235,7 +235,7 @@ CCometixLine 支持通过 TOML 文件和交互式 TUI 进行完整配置：
 - 颜色自定义
 - 格式选项
 
-支持的段落：目录、Git、模型、Effort、上下文窗口、使用量、会话、成本、输出样式、更新
+支持的段落：目录、Git、模型、Effort、Agents、上下文窗口、使用量、会话、成本、输出样式、更新
 
 ### Effort 配置
 
@@ -254,6 +254,18 @@ options = {}
 ```
 
 设置 `enabled = false` 即可隐藏 Effort。显示值直接来自状态栏输入的 `effort.level`，不会根据模型名、思考开关或 token 用量推断。
+
+### 子 agent 运行状态
+
+**所有内置主题默认关闭 Agents。** 运行 `ccline --config`，选中 **Agents**，按 **Enter** 开启，再按 **S** 保存。保存时会在 `~/.claude/settings.json` 安装 `SessionStart`、`SubagentStart`、`SubagentStop` 和 `SessionEnd` 命令 hooks。没有配置状态栏时会同时配置 ccline；已有状态栏命令保持不变。未设置 `refreshInterval` 时会添加两秒刷新，使主会话空闲时也能更新后台活动。
+
+关闭 **Agents** 并按 **S** 保存即可卸载对应 hooks，保留其他 hooks 和设置。本功能添加的刷新间隔若未被修改，会在卸载时移除；原有或后来手动修改的间隔保持不变。未保存的切换只影响预览。**W** 和 **Ctrl+S** 只保存主题文件，不改变 hooks 安装状态；**S** 才会应用活动开关。配置或主题没有 Agents 条目时，TUI 会将其作为默认关闭的选项显示。
+
+观察到活跃子 agent 时，主状态栏显示例如 `Agents: 2 active · 1 responded · Explore 35s · reviewer 1m20s`。没有活跃子 agent 或尚未收到事件时，整个段落及其分隔符隐藏。按 **Tab** 可编辑活跃文本颜色、图标、背景和文字样式，按 **Shift+上/下方向键** 调整位置。TUI 使用示例活动预览外观，即使当前会话空闲也可以预览。
+
+记录按会话 ID 和 agent ID 隔离，并通过进程间文件锁处理并发事件。重复启动事件不会增加计数；恢复子 agent 时重新计时；压缩上下文保留活动记录，启动或恢复会话则重置该会话的观察记录。每次全新安装在 `~/.claude/ccline/agents/` 下使用独立目录，重新开启不会复用上次安装的记录。安装信息保存在 `~/.claude/ccline/agents-installation.json`。
+
+汇总依据[官方生命周期 hooks](https://code.claude.com/docs/en/hooks#subagentstart)。`responded` 表示收到 `SubagentStop`，不代表任务成功。这些事件无法可靠区分等待授权、失败、取消或其他 stop hook 要求继续运行的状态，因此使用可配置的活跃颜色，不推断这些细分状态。没有结束事件的异常中断无法从这份数据确认；安装前已在运行的 agent 不会通过扫描转录文件重建。状态或设置文件损坏时会明确报错。
 
 ### 模型配置 (`models.toml`)
 

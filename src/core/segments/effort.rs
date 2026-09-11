@@ -37,6 +37,7 @@ mod tests {
 
     fn payload() -> Value {
         json!({
+            "session_id": "effort-test",
             "model": { "id": "claude-opus-4-6", "display_name": "Opus 4.6" },
             "workspace": { "current_dir": "/work/project" },
             "transcript_path": "/nonexistent/session.jsonl",
@@ -59,13 +60,16 @@ mod tests {
             let mut value = payload();
             value["effort"] = json!({ "level": level });
             let input: InputData = serde_json::from_value(value).unwrap();
-            let data = collect_all_segments(&config, &input);
+            let data = collect_all_segments(&config, &input).unwrap();
             assert_eq!(data.len(), 1);
             assert_eq!(data[0].1.primary, level);
             assert!(renderer.generate(data).contains(level));
         }
         let input = serde_json::from_value(payload()).unwrap();
-        assert_eq!(renderer.generate(collect_all_segments(&config, &input)), "");
+        assert_eq!(
+            renderer.generate(collect_all_segments(&config, &input).unwrap()),
+            ""
+        );
     }
 
     #[test]
@@ -87,7 +91,7 @@ mod tests {
         let mut value = payload();
         value["effort"] = json!({ "level": "high" });
         let input = serde_json::from_value(value).unwrap();
-        let data = collect_all_segments(&restored, &input);
+        let data = collect_all_segments(&restored, &input).unwrap();
         assert!(data.is_empty());
         assert_eq!(StatusLineGenerator::new(restored).generate(data), "");
     }
@@ -116,10 +120,10 @@ mod tests {
                         segment.enabled = true;
                     }
                     let expected = StatusLineGenerator::new(config.clone())
-                        .generate(collect_all_segments(&config, &input));
+                        .generate(collect_all_segments(&config, &input).unwrap());
                     config.segments.insert(position, effort);
                     let actual = StatusLineGenerator::new(config.clone())
-                        .generate(collect_all_segments(&config, &input));
+                        .generate(collect_all_segments(&config, &input).unwrap());
                     assert_eq!(actual, expected, "position {position}, mode {mode:?}");
                 }
             }

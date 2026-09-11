@@ -7,6 +7,18 @@ use std::io::{self, IsTerminal};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse_args();
 
+    if let Some(generation) = cli.agents_hook {
+        use ccometixline::agents::{self, store::ActivityStore, HookInput};
+        let input: HookInput = serde_json::from_reader(io::stdin().lock())?;
+        ActivityStore::new(
+            agents::data_dir()?
+                .join("agents")
+                .join(generation.to_string()),
+        )
+        .record(input, agents::store::now()?)?;
+        return Ok(());
+    }
+
     if cli.config {
         ccometixline::ui::run_configurator()?;
         return Ok(());
@@ -39,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Load configuration
-    let mut config = Config::load().unwrap_or_else(|_| Config::default());
+    let mut config = Config::load()?;
 
     // Apply theme override if provided
     if let Some(theme) = cli.theme {
@@ -65,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input: InputData = serde_json::from_reader(stdin.lock())?;
 
     // Collect segment data
-    let segments_data = collect_all_segments(&config, &input);
+    let segments_data = collect_all_segments(&config, &input)?;
 
     // Render statusline
     let generator = StatusLineGenerator::new(config);

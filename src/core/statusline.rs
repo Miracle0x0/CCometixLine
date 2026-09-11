@@ -456,7 +456,7 @@ impl StatusLineGenerator {
 pub fn collect_all_segments(
     config: &Config,
     input: &crate::config::InputData,
-) -> Vec<(SegmentConfig, SegmentData)> {
+) -> Result<Vec<(SegmentConfig, SegmentData)>, Box<dyn std::error::Error>> {
     use crate::core::segments::*;
 
     let mut results = Vec::new();
@@ -468,6 +468,7 @@ pub fn collect_all_segments(
         }
 
         let segment_data = match segment_config.id {
+            crate::config::SegmentId::Agents => AgentsSegment::collect(input)?,
             crate::config::SegmentId::Model => {
                 let segment = ModelSegment::new();
                 segment.collect(input)
@@ -520,5 +521,5 @@ pub fn collect_all_segments(
         }
     }
 
-    results
+    Ok(results)
 }

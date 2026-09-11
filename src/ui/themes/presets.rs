@@ -11,6 +11,27 @@ use super::{
 pub struct ThemePresets;
 
 impl ThemePresets {
+    /// Agents is opt-in in every theme and uses the theme's directory palette.
+    pub fn agents_segment(theme_name: &str) -> crate::config::SegmentConfig {
+        let mut segment = match theme_name {
+            "cometix" => theme_cometix::directory_segment(),
+            "gruvbox" => theme_gruvbox::directory_segment(),
+            "minimal" => theme_minimal::directory_segment(),
+            "nord" => theme_nord::directory_segment(),
+            "powerline-dark" => theme_powerline_dark::directory_segment(),
+            "powerline-light" => theme_powerline_light::directory_segment(),
+            "powerline-rose-pine" => theme_powerline_rose_pine::directory_segment(),
+            "powerline-tokyo-night" => theme_powerline_tokyo_night::directory_segment(),
+            _ => theme_default::directory_segment(),
+        };
+        segment.id = crate::config::SegmentId::Agents;
+        segment.enabled = false;
+        segment.icon.plain = "&".into();
+        segment.icon.nerd_font = "\u{f0c0}".into();
+        segment.options.clear();
+        segment
+    }
+
     /// Default Effort appearance, independent of the configured Model segment.
     pub fn effort_segment(theme_name: &str) -> crate::config::SegmentConfig {
         match theme_name {
@@ -153,6 +174,7 @@ impl ThemePresets {
                 theme_cometix::cost_segment(),
                 theme_cometix::session_segment(),
                 theme_cometix::output_style_segment(),
+                Self::agents_segment("cometix"),
             ],
             theme: "cometix".to_string(),
         }
@@ -174,6 +196,7 @@ impl ThemePresets {
                 theme_default::cost_segment(),
                 theme_default::session_segment(),
                 theme_default::output_style_segment(),
+                Self::agents_segment("default"),
             ],
             theme: "default".to_string(),
         }
@@ -195,6 +218,7 @@ impl ThemePresets {
                 theme_minimal::cost_segment(),
                 theme_minimal::session_segment(),
                 theme_minimal::output_style_segment(),
+                Self::agents_segment("minimal"),
             ],
             theme: "minimal".to_string(),
         }
@@ -216,6 +240,7 @@ impl ThemePresets {
                 theme_gruvbox::cost_segment(),
                 theme_gruvbox::session_segment(),
                 theme_gruvbox::output_style_segment(),
+                Self::agents_segment("gruvbox"),
             ],
             theme: "gruvbox".to_string(),
         }
@@ -237,6 +262,7 @@ impl ThemePresets {
                 theme_nord::cost_segment(),
                 theme_nord::session_segment(),
                 theme_nord::output_style_segment(),
+                Self::agents_segment("nord"),
             ],
             theme: "nord".to_string(),
         }
@@ -258,6 +284,7 @@ impl ThemePresets {
                 theme_powerline_dark::cost_segment(),
                 theme_powerline_dark::session_segment(),
                 theme_powerline_dark::output_style_segment(),
+                Self::agents_segment("powerline-dark"),
             ],
             theme: "powerline-dark".to_string(),
         }
@@ -279,6 +306,7 @@ impl ThemePresets {
                 theme_powerline_light::cost_segment(),
                 theme_powerline_light::session_segment(),
                 theme_powerline_light::output_style_segment(),
+                Self::agents_segment("powerline-light"),
             ],
             theme: "powerline-light".to_string(),
         }
@@ -300,6 +328,7 @@ impl ThemePresets {
                 theme_powerline_rose_pine::cost_segment(),
                 theme_powerline_rose_pine::session_segment(),
                 theme_powerline_rose_pine::output_style_segment(),
+                Self::agents_segment("powerline-rose-pine"),
             ],
             theme: "powerline-rose-pine".to_string(),
         }
@@ -321,6 +350,7 @@ impl ThemePresets {
                 theme_powerline_tokyo_night::cost_segment(),
                 theme_powerline_tokyo_night::session_segment(),
                 theme_powerline_tokyo_night::output_style_segment(),
+                Self::agents_segment("powerline-tokyo-night"),
             ],
             theme: "powerline-tokyo-night".to_string(),
         }
@@ -346,6 +376,13 @@ mod tests {
             ThemePresets::get_powerline_tokyo_night(),
         ] {
             config.check().unwrap();
+            let agents: Vec<_> = config
+                .segments
+                .iter()
+                .filter(|s| s.id == SegmentId::Agents)
+                .collect();
+            assert_eq!(agents.len(), 1, "{}", config.theme);
+            assert!(!agents[0].enabled, "{}", config.theme);
             let mut restored: Config =
                 toml::from_str(&toml::to_string_pretty(&config).unwrap()).unwrap();
             let model = restored

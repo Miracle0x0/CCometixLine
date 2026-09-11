@@ -66,6 +66,7 @@ pub enum AnsiColor {
 pub enum SegmentId {
     Model,
     Effort,
+    Agents,
     Directory,
     Git,
     ContextWindow,
@@ -118,6 +119,7 @@ pub struct Effort {
 
 #[derive(Deserialize)]
 pub struct InputData {
+    pub session_id: String,
     pub model: Model,
     pub effort: Option<Effort>,
     pub workspace: Workspace,
@@ -247,6 +249,12 @@ impl NormalizedUsage {
 }
 
 impl Config {
+    pub fn agents_enabled(&self) -> bool {
+        self.segments
+            .iter()
+            .any(|segment| segment.id == SegmentId::Agents && segment.enabled)
+    }
+
     /// Check if current config matches the specified theme preset
     pub fn matches_theme(&self, theme_name: &str) -> bool {
         let theme_preset = crate::ui::themes::ThemePresets::get_theme(theme_name);

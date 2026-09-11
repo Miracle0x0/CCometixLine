@@ -104,6 +104,11 @@ impl PreviewComponent {
                         map
                     },
                 },
+                SegmentId::Agents => SegmentData {
+                    primary: "Agents: 2 active · 1 responded · Explore 35s · reviewer 1m20s".into(),
+                    secondary: String::new(),
+                    metadata: HashMap::new(),
+                },
                 SegmentId::Effort => SegmentData {
                     primary: "high".to_string(),
                     secondary: String::new(),

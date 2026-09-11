@@ -50,6 +50,7 @@ impl SegmentListComponent {
                 let segment_name = match segment.id {
                     SegmentId::Model => "Model",
                     SegmentId::Effort => "Effort",
+                    SegmentId::Agents => "Agents",
                     SegmentId::Directory => "Directory",
                     SegmentId::Git => "Git",
                     SegmentId::ContextWindow => "Context Window",

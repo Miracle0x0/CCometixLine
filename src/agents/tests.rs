@@ -3,7 +3,7 @@ use super::{
     store::{Activity, ActivityStore},
     HookEvent, HookInput,
 };
-use crate::core::segments::AgentsSegment;
+use crate::core::segments::{AgentsSegment, SegmentData};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
@@ -47,6 +47,13 @@ fn input(session: &str, event: HookEvent) -> HookInput {
         event,
     }
 }
+fn statusline_input(session: &str) -> crate::config::InputData {
+    serde_json::from_value(json!({"session_id": session,
+        "model":{"id":"test","display_name":"test"},"workspace":{"current_dir":"/"},"transcript_path":"unused"})).unwrap()
+}
+fn render(activity: Option<&Activity>, now: u64) -> Option<SegmentData> {
+    AgentsSegment::render(activity, now, AgentsSegment::DEFAULT_MAX_AGENTS)
+}
 
 #[test]
 fn duplicate_events_and_resuming_preserve_identity_and_elapsed_time() {
@@ -54,14 +61,14 @@ fn duplicate_events_and_resuming_preserve_identity_and_elapsed_time() {
     activity.apply(start("a", "Explore"), 100);
     activity.apply(start("a", "Explore"), 110);
     activity.apply(start("b", "reviewer"), 115);
-    let text = AgentsSegment::render(Some(&activity), 180).unwrap().primary;
+    let text = render(Some(&activity), 180).unwrap().primary;
     assert_eq!(text, "Agents: 2 active · Explore 1m20s · reviewer 1m05s");
     activity.apply(stop("a"), 190);
     activity.apply(stop("a"), 200);
     activity.apply(stop("unobserved"), 200);
     assert_eq!(activity.agents.len(), 2);
     assert_eq!(activity.agents["a"].responded_at, Some(190));
-    assert!(AgentsSegment::render(Some(&activity), 201)
+    assert!(render(Some(&activity), 201)
         .unwrap()
         .primary
         .contains("1 active · 1 responded"));
@@ -73,15 +80,15 @@ fn duplicate_events_and_resuming_preserve_identity_and_elapsed_time() {
 #[test]
 fn idle_and_ended_sessions_hide_the_entire_segment() {
     let mut activity = Activity::default();
-    assert!(AgentsSegment::render(None, 100).is_none());
-    assert!(AgentsSegment::render(Some(&activity), 100).is_none());
+    assert!(render(None, 100).is_none());
+    assert!(render(Some(&activity), 100).is_none());
     activity.apply(start("a", "Explore"), 100);
     activity.apply(stop("a"), 130);
-    assert!(AgentsSegment::render(Some(&activity), 140).is_none());
+    assert!(render(Some(&activity), 140).is_none());
     activity.apply(start("a", "Explore"), 150);
     activity.apply(HookEvent::SessionEnd, 160);
     activity.apply(start("late", "Explore"), 170);
-    assert!(AgentsSegment::render(Some(&activity), 180).is_none());
+    assert!(render(Some(&activity), 180).is_none());
     assert_eq!(activity.agents.len(), 1);
 }
 
@@ -155,7 +162,7 @@ fn store_serializes_concurrent_writers_and_isolates_sessions() {
             });
         }
     });
-    assert!(AgentsSegment::render(store.read("one").unwrap().as_ref(), 130).is_none());
+    assert!(render(store.read("one").unwrap().as_ref(), 130).is_none());
 }
 
 #[test]
@@ -247,8 +254,7 @@ fn invalid_settings_fail_without_installation_or_file_changes_and_disabled_is_in
 
 #[test]
 fn hiding_agents_leaves_no_separator_or_background_in_any_style() {
-    use crate::config::{InputData, SegmentId, StyleMode};
-    use crate::core::segments::SegmentData;
+    use crate::config::{SegmentId, StyleMode};
     use crate::core::{collect_all_segments, StatusLineGenerator};
     use crate::ui::themes::ThemePresets;
     for mut config in [
@@ -279,7 +285,7 @@ fn hiding_agents_leaves_no_separator_or_background_in_any_style() {
             agents.enabled = true;
             for position in 0..=1 {
                 let mut segments = vec![(directory.clone(), data.clone())];
-                if let Some(data) = AgentsSegment::render(Some(&Activity::default()), 100) {
+                if let Some(data) = render(Some(&Activity::default()), 100) {
                     segments.insert(position, (agents.clone(), data));
                 }
                 assert_eq!(renderer.generate(segments), expected);
@@ -288,7 +294,127 @@ fn hiding_agents_leaves_no_separator_or_background_in_any_style() {
     }
     let mut config = ThemePresets::get_default();
     config.segments.retain(|s| s.id == SegmentId::Agents);
-    let input: InputData = serde_json::from_value(json!({"session_id":"disabled-test",
-        "model":{"id":"test","display_name":"test"},"workspace":{"current_dir":"/"},"transcript_path":"unused"})).unwrap();
-    assert!(collect_all_segments(&config, &input).unwrap().is_empty());
+    assert!(
+        collect_all_segments(&config, &statusline_input("disabled-test"))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn many_active_agents_are_listed_longest_running_first_up_to_the_limit() {
+    let mut activity = Activity::default();
+    // Start order differs from ID order, and two agents start within the same second.
+    activity.apply(start("d", "Plan"), 130);
+    activity.apply(start("c", "reviewer"), 100);
+    activity.apply(start("f", "code-simplifier"), 100);
+    activity.apply(start("b", "Explore"), 160);
+    activity.apply(start("a", "general-purpose"), 175);
+    activity.apply(start("e", "Explore"), 120);
+    activity.apply(stop("e"), 150);
+    let render = |max_agents| {
+        AgentsSegment::render(Some(&activity), 200, max_agents)
+            .unwrap()
+            .primary
+    };
+    assert_eq!(
+        render(AgentsSegment::DEFAULT_MAX_AGENTS),
+        "Agents: 5 active · 1 responded · reviewer 1m40s · code-simplifier 1m40s · Plan 1m10s · +2 more"
+    );
+    assert_eq!(
+        render(1),
+        "Agents: 5 active · 1 responded · reviewer 1m40s · +4 more"
+    );
+    assert_eq!(render(0), "Agents: 5 active · 1 responded");
+    let complete = "Agents: 5 active · 1 responded · reviewer 1m40s · code-simplifier 1m40s · Plan 1m10s · Explore 40s · general-purpose 25s";
+    assert_eq!(render(5), complete);
+    assert_eq!(render(usize::MAX), complete);
+}
+
+#[test]
+fn max_agents_option_defaults_to_three_and_rejects_anything_but_a_count() {
+    use crate::config::{Config, SegmentId};
+    use crate::core::collect_all_segments;
+    use crate::ui::themes::ThemePresets;
+    let parse =
+        |options: Value| AgentsSegment::max_agents(&serde_json::from_value(options).unwrap());
+    assert_eq!(parse(json!({})).unwrap(), 3);
+    assert_eq!(parse(json!({"max_agents": 0})).unwrap(), 0);
+    assert_eq!(parse(json!({"max_agents": 5})).unwrap(), 5);
+    for invalid in [json!(-1), json!(2.5), json!("3"), json!(true), json!([3])] {
+        let error = parse(json!({"max_agents": invalid}))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("max_agents") && error.contains(&invalid.to_string()),
+            "{error}"
+        );
+    }
+    // Built-in themes carry the default, and edits in config.toml reach the segment.
+    let agents_options = |config: &Config| {
+        config
+            .segments
+            .iter()
+            .find(|s| s.id == SegmentId::Agents)
+            .unwrap()
+            .options
+            .clone()
+    };
+    let preset = ThemePresets::get_default();
+    let saved = toml::to_string_pretty(&preset).unwrap();
+    assert!(saved.contains("max_agents = 3"), "{saved}");
+    let reopened: Config = toml::from_str(&saved).unwrap();
+    assert_eq!(agents_options(&reopened), agents_options(&preset));
+    let edited: Config =
+        toml::from_str(&saved.replace("max_agents = 3", "max_agents = 5")).unwrap();
+    assert_eq!(
+        AgentsSegment::max_agents(&agents_options(&edited)).unwrap(),
+        5
+    );
+    // An invalid option is an explicit error for the status line, not a silent default.
+    let mut invalid = edited;
+    invalid.segments.retain(|s| s.id == SegmentId::Agents);
+    invalid.segments[0].enabled = true;
+    invalid.segments[0]
+        .options
+        .insert("max_agents".into(), json!(-1));
+    let error = collect_all_segments(&invalid, &statusline_input("invalid-option")).unwrap_err();
+    assert!(error.to_string().contains("max_agents"), "{error}");
+}
+
+#[test]
+fn preview_lists_sample_agents_with_the_configured_limit_and_shows_option_errors() {
+    use crate::config::SegmentId;
+    use crate::ui::components::preview::PreviewComponent;
+    use crate::ui::themes::ThemePresets;
+    let mut config = ThemePresets::get_default();
+    let index = config
+        .segments
+        .iter()
+        .position(|s| s.id == SegmentId::Agents)
+        .unwrap();
+    config.segments[index].enabled = true;
+    let mut preview = PreviewComponent::new();
+    preview.update_preview(&config);
+    assert!(
+        preview
+            .get_preview_cache()
+            .contains("Agents: 4 active · reviewer 1m20s · Explore 35s · Plan 12s · +1 more"),
+        "{}",
+        preview.get_preview_cache()
+    );
+    config.segments[index]
+        .options
+        .insert("max_agents".into(), json!(5));
+    preview.update_preview(&config);
+    assert!(preview.get_preview_cache().contains(
+        "Agents: 4 active · reviewer 1m20s · Explore 35s · Plan 12s · general-purpose 5s"
+    ));
+    config.segments[index]
+        .options
+        .insert("max_agents".into(), json!("many"));
+    preview.update_preview(&config);
+    assert!(preview
+        .get_preview_cache()
+        .contains("max_agents must be a non-negative integer, not \"many\""));
 }

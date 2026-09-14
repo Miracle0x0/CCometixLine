@@ -261,7 +261,7 @@ options = {}
 
 关闭 **Agents** 并按 **S** 保存即可卸载对应 hooks，保留其他 hooks 和设置。本功能添加的刷新间隔若未被修改，会在卸载时移除；原有或后来手动修改的间隔保持不变。未保存的切换只影响预览。**W** 和 **Ctrl+S** 只保存主题文件，不改变 hooks 安装状态；**S** 才会应用活动开关。配置或主题没有 Agents 条目时，TUI 会将其作为默认关闭的选项显示。
 
-观察到活跃子 agent 时，主状态栏显示例如 `Agents: 2 active · 1 responded · Explore 35s · reviewer 1m20s`。没有活跃子 agent 或尚未收到事件时，整个段落及其分隔符隐藏。按 **Tab** 可编辑活跃文本颜色、图标、背景和文字样式，按 **Shift+上/下方向键** 调整位置。TUI 使用示例活动预览外观，即使当前会话空闲也可以预览。
+观察到活跃子 agent 时，主状态栏显示例如 `Agents: 4 active · 1 responded · reviewer 1m20s · Explore 35s · Plan 12s · +1 more`。活跃 agent 按运行时长从长到短排列，默认最多列出 3 个，其余汇总为 `+N more`。段落的 `options` 支持 `max_agents`，内置主题设为 `3`；在 `config.toml` 中调大可列出更多 agent，设为 `0` 时只显示数量，其他取值会明确报错。没有活跃子 agent 或尚未收到事件时，整个段落及其分隔符隐藏。按 **Tab** 可编辑活跃文本颜色、图标、背景和文字样式，按 **Shift+上/下方向键** 调整位置。TUI 使用示例活动并按当前上限预览外观，即使当前会话空闲也可以预览。
 
 记录按会话 ID 和 agent ID 隔离，并通过进程间文件锁处理并发事件。重复启动事件不会增加计数；恢复子 agent 时重新计时；压缩上下文保留活动记录，启动或恢复会话则重置该会话的观察记录。每次全新安装在 `~/.claude/ccline/agents/` 下使用独立目录，重新开启不会复用上次安装的记录。安装信息保存在 `~/.claude/ccline/agents-installation.json`。
 

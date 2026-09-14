@@ -28,7 +28,10 @@ impl ThemePresets {
         segment.enabled = false;
         segment.icon.plain = "&".into();
         segment.icon.nerd_font = "\u{f0c0}".into();
-        segment.options.clear();
+        segment.options = std::collections::HashMap::from([(
+            "max_agents".to_string(),
+            serde_json::json!(crate::core::segments::AgentsSegment::DEFAULT_MAX_AGENTS),
+        )]);
         segment
     }
 

@@ -468,7 +468,9 @@ pub fn collect_all_segments(
         }
 
         let segment_data = match segment_config.id {
-            crate::config::SegmentId::Agents => AgentsSegment::collect(input)?,
+            crate::config::SegmentId::Agents => {
+                AgentsSegment::collect(input, &segment_config.options)?
+            }
             crate::config::SegmentId::Model => {
                 let segment = ModelSegment::new();
                 segment.collect(input)

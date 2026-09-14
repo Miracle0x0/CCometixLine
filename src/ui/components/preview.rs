@@ -81,6 +81,45 @@ impl PreviewComponent {
         &self.preview_cache
     }
 
+    /// Example activity rendered with the configured limit, so the preview shows `+N more`.
+    fn agents_sample(options: &HashMap<String, serde_json::Value>) -> SegmentData {
+        use crate::agents::store::{Activity, Agent};
+        use crate::core::segments::AgentsSegment;
+
+        let mut activity = Activity::default();
+        for (id, (agent_type, started_at)) in [
+            ("reviewer", 120),
+            ("Explore", 165),
+            ("Plan", 188),
+            ("general-purpose", 195),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            activity.agents.insert(
+                id.to_string(),
+                Agent {
+                    agent_type: agent_type.to_string(),
+                    started_at,
+                    responded_at: None,
+                },
+            );
+        }
+        let primary = match AgentsSegment::max_agents(options) {
+            Ok(max_agents) => {
+                AgentsSegment::render(Some(&activity), 200, max_agents)
+                    .expect("the sample activity has active agents")
+                    .primary
+            }
+            Err(error) => error.to_string(),
+        };
+        SegmentData {
+            primary,
+            secondary: String::new(),
+            metadata: HashMap::new(),
+        }
+    }
+
     /// Generate mock segments data for preview display
     /// This creates perfect preview data without depending on real environment
     fn generate_mock_segments_data(
@@ -104,11 +143,7 @@ impl PreviewComponent {
                         map
                     },
                 },
-                SegmentId::Agents => SegmentData {
-                    primary: "Agents: 2 active · 1 responded · Explore 35s · reviewer 1m20s".into(),
-                    secondary: String::new(),
-                    metadata: HashMap::new(),
-                },
+                SegmentId::Agents => Self::agents_sample(&segment_config.options),
                 SegmentId::Effort => SegmentData {
                     primary: "high".to_string(),
                     secondary: String::new(),

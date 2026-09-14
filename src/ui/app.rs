@@ -789,7 +789,7 @@ mod tests {
         assert_eq!(serde_json::to_value(&unchanged).unwrap(), original);
         app.toggle_current();
         assert!(app.config.agents_enabled());
-        assert!(app.preview.get_preview_cache().contains("Agents: 2 active"));
+        assert!(app.preview.get_preview_cache().contains("Agents: 4 active"));
         assert!(app
             .status_message
             .as_ref()
@@ -832,7 +832,7 @@ mod tests {
             app.config.segments[app.selected_segment].colors.text,
             Some(AnsiColor::Color16 { c16: 3 })
         );
-        assert!(screen(&mut app, 120, 40).contains("Agents: 2 active"));
+        assert!(screen(&mut app, 120, 40).contains("Agents: 4 active"));
         app.switch_to_theme("minimal");
         assert!(!app.config.agents_enabled());
         assert!(app
@@ -859,7 +859,7 @@ mod tests {
             .unwrap();
         app.toggle_current();
         let rendered = screen(&mut app, 80, 24);
-        assert!(rendered.contains("Agents: 2 active"));
+        assert!(rendered.contains("Agents: 4 active"));
         assert!(rendered.contains("install hooks"));
     }
 

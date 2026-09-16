@@ -62,7 +62,10 @@ mod tests {
             let input: InputData = serde_json::from_value(value).unwrap();
             let data = collect_all_segments(&config, &input).unwrap();
             assert_eq!(data.len(), 1);
-            assert_eq!(data[0].1.primary, level);
+            let crate::core::segments::SegmentContent::Text(ref text) = data[0].1 else {
+                panic!("expected effort text")
+            };
+            assert_eq!(text.primary, level);
             assert!(renderer.generate(data).contains(level));
         }
         let input = serde_json::from_value(payload()).unwrap();

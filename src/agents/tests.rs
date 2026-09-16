@@ -51,7 +51,10 @@ fn statusline_input(session: &str) -> crate::config::InputData {
     serde_json::from_value(json!({"session_id": session,
         "model":{"id":"test","display_name":"test"},"workspace":{"current_dir":"/"},"transcript_path":"unused"})).unwrap()
 }
-fn render(activity: Option<&Activity>, now: u64) -> Option<SegmentData> {
+fn render(
+    activity: Option<&Activity>,
+    now: u64,
+) -> Option<crate::core::segments::agents::AgentSummary> {
     AgentsSegment::render(activity, now, AgentsSegment::DEFAULT_MAX_AGENTS)
 }
 
@@ -61,7 +64,7 @@ fn duplicate_events_and_resuming_preserve_identity_and_elapsed_time() {
     activity.apply(start("a", "Explore"), 100);
     activity.apply(start("a", "Explore"), 110);
     activity.apply(start("b", "reviewer"), 115);
-    let text = render(Some(&activity), 180).unwrap().primary;
+    let text = render(Some(&activity), 180).unwrap().text(usize::MAX);
     assert_eq!(text, "Agents: 2 active · Explore 1m20s · reviewer 1m05s");
     activity.apply(stop("a"), 190);
     activity.apply(stop("a"), 200);
@@ -70,7 +73,7 @@ fn duplicate_events_and_resuming_preserve_identity_and_elapsed_time() {
     assert_eq!(activity.agents["a"].responded_at, Some(190));
     assert!(render(Some(&activity), 201)
         .unwrap()
-        .primary
+        .text(usize::MAX)
         .contains("1 active · 1 responded"));
     activity.apply(start("a", "Explore"), 250);
     assert_eq!(activity.agents["a"].started_at, 250);
@@ -196,6 +199,13 @@ fn installation_is_idempotent_and_uninstall_preserves_other_hooks_and_settings()
     integration::configure_at(&data, &path, &exe, true).unwrap();
     let installed = settings(&path);
     let manifest = settings(&data.join("agents-installation.json"));
+    let installation_id = manifest["installation_id"].as_str().unwrap();
+    installation_id
+        .parse::<integration::InstallationId>()
+        .unwrap();
+    assert!(manifest["command"].as_str().unwrap().ends_with(&format!(
+        "--agents-hook --installation-id {installation_id}"
+    )));
     assert_eq!(installed["statusLine"]["command"], "custom-status");
     assert_eq!(installed["statusLine"]["refreshInterval"], 2);
     assert!(manifest["command"].as_str().unwrap().contains("'\\''"));
@@ -224,7 +234,28 @@ fn uninstall_keeps_user_refresh_changes_and_a_new_install_has_fresh_state() {
     assert_eq!(settings(&path)["statusLine"]["refreshInterval"], 5);
     integration::configure_at(&data, &path, &exe, true).unwrap();
     let second = settings(&data.join("agents-installation.json"));
-    assert_ne!(first["generation"], second["generation"]);
+    assert_ne!(first["installation_id"], second["installation_id"]);
+    // A delayed event from the old hook writes only to its original installation.
+    let old_store = ActivityStore::new(
+        data.join("agents")
+            .join(first["installation_id"].as_str().unwrap()),
+    );
+    let new_store = ActivityStore::new(
+        data.join("agents")
+            .join(second["installation_id"].as_str().unwrap()),
+    );
+    old_store
+        .record(input("session", start("old", "Explore")), 100)
+        .unwrap();
+    new_store
+        .record(input("session", start("new", "Plan")), 110)
+        .unwrap();
+    old_store
+        .record(input("session", stop("old")), 120)
+        .unwrap();
+    let current = new_store.read("session").unwrap().unwrap();
+    assert_eq!(current.agents.len(), 1);
+    assert!(current.agents["new"].responded_at.is_none());
     assert_eq!(settings(&path)["statusLine"]["refreshInterval"], 5);
     integration::configure_at(&data, &path, &exe, false).unwrap();
     assert_eq!(settings(&path)["statusLine"]["refreshInterval"], 5);
@@ -281,12 +312,18 @@ fn hiding_agents_leaves_no_separator_or_background_in_any_style() {
                 metadata: Default::default(),
             };
             let renderer = StatusLineGenerator::new(config.clone());
-            let expected = renderer.generate(vec![(directory.clone(), data.clone())]);
+            let expected = renderer.generate(vec![(directory.clone(), data.clone().into())]);
             agents.enabled = true;
             for position in 0..=1 {
-                let mut segments = vec![(directory.clone(), data.clone())];
+                let mut segments = vec![(directory.clone(), data.clone().into())];
                 if let Some(data) = render(Some(&Activity::default()), 100) {
-                    segments.insert(position, (agents.clone(), data));
+                    segments.insert(
+                        position,
+                        (
+                            agents.clone(),
+                            crate::core::segments::SegmentContent::Agents(data),
+                        ),
+                    );
                 }
                 assert_eq!(renderer.generate(segments), expected);
             }
@@ -315,7 +352,7 @@ fn many_active_agents_are_listed_longest_running_first_up_to_the_limit() {
     let render = |max_agents| {
         AgentsSegment::render(Some(&activity), 200, max_agents)
             .unwrap()
-            .primary
+            .text(usize::MAX)
     };
     assert_eq!(
         render(AgentsSegment::DEFAULT_MAX_AGENTS),
@@ -395,7 +432,7 @@ fn preview_lists_sample_agents_with_the_configured_limit_and_shows_option_errors
         .unwrap();
     config.segments[index].enabled = true;
     let mut preview = PreviewComponent::new();
-    preview.update_preview(&config);
+    preview.update_preview_with_width(&config, 500);
     assert!(
         preview
             .get_preview_cache()
@@ -406,14 +443,14 @@ fn preview_lists_sample_agents_with_the_configured_limit_and_shows_option_errors
     config.segments[index]
         .options
         .insert("max_agents".into(), json!(5));
-    preview.update_preview(&config);
+    preview.update_preview_with_width(&config, 500);
     assert!(preview.get_preview_cache().contains(
         "Agents: 4 active · reviewer 1m20s · Explore 35s · Plan 12s · general-purpose 5s"
     ));
     config.segments[index]
         .options
         .insert("max_agents".into(), json!("many"));
-    preview.update_preview(&config);
+    preview.update_preview_with_width(&config, 500);
     assert!(preview
         .get_preview_cache()
         .contains("max_agents must be a non-negative integer, not \"many\""));

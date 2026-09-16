@@ -7,13 +7,13 @@ use std::io::{self, IsTerminal};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse_args();
 
-    if let Some(generation) = cli.agents_hook {
+    if cli.agents_hook {
         use ccometixline::agents::{self, store::ActivityStore, HookInput};
         let input: HookInput = serde_json::from_reader(io::stdin().lock())?;
         ActivityStore::new(
             agents::data_dir()?
                 .join("agents")
-                .join(generation.to_string()),
+                .join(cli.installation_id.as_ref().unwrap().to_string()),
         )
         .record(input, agents::store::now()?)?;
         return Ok(());
@@ -81,7 +81,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Render statusline
     let generator = StatusLineGenerator::new(config);
-    let statusline = generator.generate(segments_data);
+    let width = if segments_data.iter().any(|(_, data)| {
+        matches!(data, ccometixline::core::segments::SegmentContent::Agents(agents) if agents.max_agents > 0)
+    }) {
+        Some(ccometixline::core::statusline::available_width(
+            &std::env::var("COLUMNS")
+                .map_err(|e| format!("Cannot read status line width from COLUMNS: {e}"))?,
+            cli.width_offset,
+        )?)
+    } else {
+        None
+    };
+    let statusline = generator.generate_with_width(segments_data, width);
 
     println!("{}", statusline);
 

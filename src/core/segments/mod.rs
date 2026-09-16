@@ -26,6 +26,19 @@ pub struct SegmentData {
     pub metadata: HashMap<String, String>,
 }
 
+/// Keep variable-length agent activity structured until the entire line is laid out.
+#[derive(Debug, Clone)]
+pub enum SegmentContent {
+    Text(SegmentData),
+    Agents(agents::AgentSummary),
+}
+
+impl From<SegmentData> for SegmentContent {
+    fn from(data: SegmentData) -> Self {
+        Self::Text(data)
+    }
+}
+
 // Re-export all segment types
 pub use agents::AgentsSegment;
 pub use context_window::ContextWindowSegment;

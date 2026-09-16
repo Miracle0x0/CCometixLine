@@ -270,10 +270,14 @@ impl SettingsComponent {
                 ),
                 create_field_line(
                     FieldSelection::Options,
-                    vec![Span::raw(format!(
-                        "└─ Options: {} items",
-                        segment.options.len()
-                    ))],
+                    vec![Span::raw(if segment.id == SegmentId::Agents {
+                        match crate::core::segments::AgentsSegment::max_agents(&segment.options) {
+                            Ok(value) => format!("└─ Max agents: {value} (0: counts only)"),
+                            Err(error) => format!("└─ Max agents: {error}"),
+                        }
+                    } else {
+                        format!("└─ Options: {} items", segment.options.len())
+                    })],
                 ),
             ];
             let text = Text::from(lines);
@@ -285,7 +289,23 @@ impl SettingsComponent {
                 } else {
                     Style::default()
                 });
-            let settings_panel = Paragraph::new(text).block(settings_block);
+            let selected_line: u16 = match selected_field {
+                FieldSelection::Enabled => 1,
+                FieldSelection::Icon => 2,
+                FieldSelection::IconColor => 3,
+                FieldSelection::TextColor => 4,
+                FieldSelection::BackgroundColor => 5,
+                FieldSelection::TextStyle => 6,
+                FieldSelection::Options => 7,
+            };
+            let scroll = if *selected_panel == Panel::Settings {
+                selected_line.saturating_sub(area.height.saturating_sub(3))
+            } else {
+                0
+            };
+            let settings_panel = Paragraph::new(text)
+                .block(settings_block)
+                .scroll((scroll, 0));
             f.render_widget(settings_panel, area);
         } else {
             let settings_block = Block::default()

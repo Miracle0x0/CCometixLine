@@ -1,4 +1,3 @@
-use super::SegmentData;
 use crate::agents::{
     self,
     store::{Activity, ActivityStore},
@@ -17,7 +16,7 @@ impl AgentsSegment {
     pub fn collect(
         input: &InputData,
         options: &HashMap<String, Value>,
-    ) -> Result<Option<SegmentData>> {
+    ) -> Result<Option<AgentSummary>> {
         // Validate the configuration before reading state, even when hooks are not installed.
         let max_agents = Self::max_agents(options)?;
         let Some(root) = agents::integration::active_state_dir()? else {
@@ -46,7 +45,11 @@ impl AgentsSegment {
             })
     }
 
-    pub fn render(activity: Option<&Activity>, now: u64, max_agents: usize) -> Option<SegmentData> {
+    pub fn render(
+        activity: Option<&Activity>,
+        now: u64,
+        max_agents: usize,
+    ) -> Option<AgentSummary> {
         let activity = activity?;
         if activity.ended {
             return None;
@@ -61,39 +64,58 @@ impl AgentsSegment {
         }
         // Longest-running first; the stable sort keeps agent ID order for equal start times.
         active.sort_by_key(|agent| agent.started_at);
-        let responded = activity.agents.len() - active.len();
-        let mut text = format!("Agents: {} active", active.len());
-        if responded > 0 {
-            text.push_str(&format!(" · {responded} responded"));
+        Some(AgentSummary {
+            responded: activity.agents.len() - active.len(),
+            active: active
+                .into_iter()
+                .map(|agent| ActiveAgent {
+                    name: agent
+                        .agent_type
+                        .chars()
+                        .filter(|c| !c.is_control())
+                        .collect(),
+                    elapsed: now.saturating_sub(agent.started_at),
+                })
+                .collect(),
+            max_agents,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ActiveAgent {
+    pub name: String,
+    pub elapsed: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentSummary {
+    pub active: Vec<ActiveAgent>,
+    pub responded: usize,
+    pub max_agents: usize,
+}
+
+impl AgentSummary {
+    pub fn text(&self, count: usize) -> String {
+        let count = count.min(self.max_agents).min(self.active.len());
+        let mut text = format!("Agents: {} active", self.active.len());
+        if self.responded > 0 {
+            text.push_str(&format!(" · {} responded", self.responded));
         }
-        for agent in active.iter().take(max_agents) {
-            let elapsed = now.saturating_sub(agent.started_at);
+        for agent in self.active.iter().take(count) {
+            let elapsed = agent.elapsed;
             let duration = if elapsed < 60 {
                 format!("{elapsed}s")
             } else {
                 format!("{}m{:02}s", elapsed / 60, elapsed % 60)
             };
-            // Agent names are untrusted display text, not terminal control sequences.
-            let name: String = agent
-                .agent_type
-                .chars()
-                .filter(|c| !c.is_control())
-                .collect();
-            text.push_str(&format!(" · {name} {duration}"));
+            text.push_str(&format!(" · {} {duration}", agent.name));
         }
-        let hidden = active.len().saturating_sub(max_agents);
-        // A limit of zero lists nobody, and the count already covers everyone.
-        if hidden > 0 && max_agents > 0 {
+        let hidden = self.active.len() - count;
+        // With no names, the active count already summarizes every agent.
+        if hidden > 0 && count > 0 {
             text.push_str(&format!(" · +{hidden} more"));
         }
-        Some(Self::data(text))
-    }
-
-    fn data(primary: String) -> SegmentData {
-        SegmentData {
-            primary,
-            secondary: String::new(),
-            metadata: HashMap::new(),
-        }
+        text
     }
 }

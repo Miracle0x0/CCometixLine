@@ -7,6 +7,46 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
+const INSTALLATION_FORMAT: &str = "%Y%m%dT%H%M%S%.9fZ";
+
+/// A readable UTC timestamp that is also a single safe directory component.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct InstallationId(chrono::DateTime<chrono::Utc>);
+
+impl std::fmt::Display for InstallationId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.format(INSTALLATION_FORMAT))
+    }
+}
+
+impl std::str::FromStr for InstallationId {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        let parsed = chrono::NaiveDateTime::parse_from_str(value, INSTALLATION_FORMAT)
+            .map_err(|e| format!("Invalid installation ID {value:?}: {e}"))?;
+        let id = Self(parsed.and_utc());
+        if id.to_string() != value {
+            return Err("Installation ID must use YYYYMMDDTHHMMSS.nnnnnnnnnZ".into());
+        }
+        Ok(id)
+    }
+}
+
+impl TryFrom<String> for InstallationId {
+    type Error = String;
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl From<InstallationId> for String {
+    fn from(id: InstallationId) -> Self {
+        id.to_string()
+    }
+}
+
 const EVENTS: [&str; 4] = [
     "SessionStart",
     "SubagentStart",
@@ -19,7 +59,7 @@ const REFRESH_SECONDS: u64 = 2;
 struct Installation {
     command: String,
     added_refresh_interval: bool,
-    generation: u128,
+    installation_id: InstallationId,
 }
 
 fn read_json(path: &Path) -> Result<Option<Value>> {
@@ -105,13 +145,11 @@ fn edit_settings(
     let quoted = format!("'{}'", path.replace('\'', "'\\''"));
     // A new installation starts a fresh observation period. Re-enabling must not
     // revive records from hooks that were uninstalled while an agent was active.
-    let generation = match previous.as_ref() {
-        Some(installed) => installed.generation,
-        None => std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_nanos(),
+    let installation_id = match previous.as_ref() {
+        Some(installed) => installed.installation_id.clone(),
+        None => InstallationId(chrono::Utc::now()),
     };
-    let command = format!("{quoted} --agents-hook {generation}");
+    let command = format!("{quoted} --agents-hook --installation-id {installation_id}");
     remove_hooks(settings, &command)?;
     let object = settings.as_object_mut().unwrap();
     let hooks = object
@@ -142,7 +180,7 @@ fn edit_settings(
     Ok(Some(Installation {
         command,
         added_refresh_interval,
-        generation,
+        installation_id,
     }))
 }
 
@@ -160,7 +198,10 @@ pub fn active_state_dir() -> Result<Option<std::path::PathBuf>> {
     let installation: Option<Installation> = read_json(&dir.join("agents-installation.json"))?
         .map(serde_json::from_value)
         .transpose()?;
-    Ok(installation.map(|installed| dir.join("agents").join(installed.generation.to_string())))
+    Ok(installation.map(|installed| {
+        dir.join("agents")
+            .join(installed.installation_id.to_string())
+    }))
 }
 
 pub fn configure_at(

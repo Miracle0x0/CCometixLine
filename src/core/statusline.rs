@@ -1,32 +1,25 @@
 use crate::config::{AnsiColor, Config, SegmentConfig, StyleMode};
-use crate::core::segments::SegmentData;
+use crate::core::segments::{SegmentContent, SegmentData};
+use unicode_width::UnicodeWidthStr;
 
-/// Strip ANSI escape sequences and return visible text length
-fn visible_width(text: &str) -> usize {
-    let mut visible = String::new();
-    let mut in_escape = false;
-    let mut chars = text.chars().peekable();
-
-    while let Some(ch) = chars.next() {
-        if ch == '\x1b' {
-            // Start of ANSI escape sequence
-            in_escape = true;
-            // Skip the [ character
-            if chars.peek() == Some(&'[') {
-                chars.next();
-            }
-        } else if in_escape {
-            // Skip until we find the end of the escape sequence (letter)
-            if ch.is_alphabetic() {
-                in_escape = false;
-            }
-        } else {
-            // Regular character
-            visible.push(ch);
-        }
+pub fn available_width(columns: &str, offset: usize) -> Result<usize, Box<dyn std::error::Error>> {
+    let columns: usize = columns
+        .parse()
+        .map_err(|_| format!("COLUMNS must be a positive integer, not {columns:?}"))?;
+    if columns == 0 {
+        return Err("COLUMNS must be a positive integer".into());
     }
+    Ok(columns.saturating_sub(offset))
+}
 
-    visible.chars().count()
+/// Measure terminal cells, excluding CSI formatting and OSC hyperlinks.
+fn visible_width(text: &str) -> usize {
+    static ESCAPES: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let escapes = ESCAPES.get_or_init(|| {
+        regex::Regex::new(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+            .expect("valid ANSI escape expression")
+    });
+    UnicodeWidthStr::width(escapes.replace_all(text, "").as_ref())
 }
 
 pub struct StatusLineGenerator {
@@ -38,30 +31,62 @@ impl StatusLineGenerator {
         Self { config }
     }
 
-    pub fn generate(&self, segments: Vec<(SegmentConfig, SegmentData)>) -> String {
-        let mut output = Vec::new();
-        let enabled_segments: Vec<_> = segments
+    pub fn generate(&self, segments: Vec<(SegmentConfig, SegmentContent)>) -> String {
+        self.generate_with_width(segments, None)
+    }
+
+    /// Fit complete agent entries into the space left by every other segment.
+    pub fn generate_with_width(
+        &self,
+        segments: Vec<(SegmentConfig, SegmentContent)>,
+        width: Option<usize>,
+    ) -> String {
+        let enabled: Vec<_> = segments
             .into_iter()
             .filter(|(config, _)| config.enabled)
             .collect();
+        let output = self.render_segments(&enabled, width);
+        self.join_segments(&output, &enabled)
+    }
 
-        for (config, data) in enabled_segments.iter() {
-            let rendered = self.render_segment(config, data);
-            if !rendered.is_empty() {
-                output.push(rendered);
+    fn render_segments(
+        &self,
+        segments: &[(SegmentConfig, SegmentContent)],
+        width: Option<usize>,
+    ) -> Vec<String> {
+        let mut output: Vec<_> = segments
+            .iter()
+            .map(|(config, content)| self.render_content(config, content, None))
+            .collect();
+        if let Some(width) = width {
+            for (index, (config, content)) in segments.iter().enumerate() {
+                let SegmentContent::Agents(agents) = content else {
+                    continue;
+                };
+                let maximum = agents.max_agents.min(agents.active.len());
+                // Each candidate includes its own +N suffix, icons, spacing and separators.
+                for count in (0..=maximum).rev() {
+                    output[index] = self.render_content(config, content, Some(count));
+                    if visible_width(&self.join_segments(&output, segments)) <= width {
+                        return output;
+                    }
+                }
             }
         }
+        output
+    }
 
-        if output.is_empty() {
-            return String::new();
-        }
-
+    fn join_segments(
+        &self,
+        output: &[String],
+        segments: &[(SegmentConfig, SegmentContent)],
+    ) -> String {
         // Handle Powerline arrow separators with color transition
         if self.config.style.separator == "\u{e0b0}" {
-            self.join_with_powerline_arrows(&output, &enabled_segments)
+            self.join_with_powerline_arrows(output, segments)
         } else {
             // For all other separators, use white color and simple join
-            self.join_with_white_separators(&output)
+            self.join_with_white_separators(output)
         }
     }
 
@@ -69,7 +94,7 @@ impl StatusLineGenerator {
     /// This method handles ANSI escape sequences properly for ratatui rendering
     pub fn generate_for_tui(
         &self,
-        segments: Vec<(SegmentConfig, SegmentData)>,
+        segments: Vec<(SegmentConfig, SegmentContent)>,
     ) -> ratatui::text::Line<'static> {
         use ansi_to_tui::IntoText;
         use ratatui::text::{Line, Span};
@@ -90,36 +115,17 @@ impl StatusLineGenerator {
     /// Generate TUI-optimized text with intelligent wrapping by segment for preview
     pub fn generate_for_tui_preview(
         &self,
-        segments: Vec<(SegmentConfig, SegmentData)>,
+        segments: Vec<(SegmentConfig, SegmentContent)>,
         max_width: u16,
     ) -> ratatui::text::Text<'_> {
         use ansi_to_tui::IntoText;
         use ratatui::text::{Line, Span, Text};
-
-        let enabled_segments: Vec<_> = segments
+        let enabled: Vec<_> = segments
             .into_iter()
             .filter(|(config, _)| config.enabled)
             .collect();
-
-        if enabled_segments.is_empty() {
-            return Text::from(vec![Line::default()]);
-        }
-
-        // Render each segment individually
-        let mut rendered_segments = Vec::new();
-        let mut segment_configs = Vec::new();
-
-        for (config, data) in &enabled_segments {
-            let rendered = self.render_segment(config, data);
-            if !rendered.is_empty() {
-                rendered_segments.push(rendered);
-                segment_configs.push(config.clone());
-            }
-        }
-
-        if rendered_segments.is_empty() {
-            return Text::from(vec![Line::default()]);
-        }
+        let rendered_segments = self.render_segments(&enabled, Some(max_width.into()));
+        let segment_configs: Vec<_> = enabled.iter().map(|(config, _)| config).collect();
 
         // Pre-calculate separators between segments
         let mut separators = Vec::new();
@@ -211,6 +217,25 @@ impl StatusLineGenerator {
         }
 
         Text::from(tui_lines)
+    }
+
+    fn render_content(
+        &self,
+        config: &SegmentConfig,
+        content: &SegmentContent,
+        count: Option<usize>,
+    ) -> String {
+        match content {
+            SegmentContent::Text(data) => self.render_segment(config, data),
+            SegmentContent::Agents(agents) => self.render_segment(
+                config,
+                &SegmentData {
+                    primary: agents.text(count.unwrap_or(agents.max_agents)),
+                    secondary: String::new(),
+                    metadata: Default::default(),
+                },
+            ),
+        }
     }
 
     fn render_segment(&self, config: &SegmentConfig, data: &SegmentData) -> String {
@@ -371,7 +396,7 @@ impl StatusLineGenerator {
     fn join_with_powerline_arrows(
         &self,
         rendered_segments: &[String],
-        segment_configs: &[(SegmentConfig, SegmentData)],
+        segment_configs: &[(SegmentConfig, SegmentContent)],
     ) -> String {
         if rendered_segments.is_empty() {
             return String::new();
@@ -456,7 +481,7 @@ impl StatusLineGenerator {
 pub fn collect_all_segments(
     config: &Config,
     input: &crate::config::InputData,
-) -> Result<Vec<(SegmentConfig, SegmentData)>, Box<dyn std::error::Error>> {
+) -> Result<Vec<(SegmentConfig, SegmentContent)>, Box<dyn std::error::Error>> {
     use crate::core::segments::*;
 
     let mut results = Vec::new();
@@ -469,19 +494,19 @@ pub fn collect_all_segments(
 
         let segment_data = match segment_config.id {
             crate::config::SegmentId::Agents => {
-                AgentsSegment::collect(input, &segment_config.options)?
+                AgentsSegment::collect(input, &segment_config.options)?.map(SegmentContent::Agents)
             }
             crate::config::SegmentId::Model => {
                 let segment = ModelSegment::new();
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
             crate::config::SegmentId::Effort => {
                 let segment = EffortSegment::new();
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
             crate::config::SegmentId::Directory => {
                 let segment = DirectorySegment::new();
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
             crate::config::SegmentId::Git => {
                 let show_sha = segment_config
@@ -490,31 +515,31 @@ pub fn collect_all_segments(
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
                 let segment = GitSegment::new().with_sha(show_sha);
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
             crate::config::SegmentId::ContextWindow => {
                 let segment = ContextWindowSegment::new();
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
             crate::config::SegmentId::Usage => {
                 let segment = UsageSegment::new();
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
             crate::config::SegmentId::Cost => {
                 let segment = CostSegment::new();
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
             crate::config::SegmentId::Session => {
                 let segment = SessionSegment::new();
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
             crate::config::SegmentId::OutputStyle => {
                 let segment = OutputStyleSegment::new();
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
             crate::config::SegmentId::Update => {
                 let segment = UpdateSegment::new();
-                segment.collect(input)
+                segment.collect(input).map(SegmentContent::Text)
             }
         };
 
@@ -524,4 +549,133 @@ pub fn collect_all_segments(
     }
 
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::SegmentId;
+    use crate::core::segments::agents::{ActiveAgent, AgentSummary};
+    use crate::ui::themes::ThemePresets;
+    use ansi_to_tui::IntoText;
+
+    fn activity(total: usize, maximum: usize) -> SegmentContent {
+        SegmentContent::Agents(AgentSummary {
+            active: (0..total)
+                .map(|i| ActiveAgent {
+                    name: format!("审查员{i}👩‍💻"),
+                    elapsed: 80 - i as u64,
+                })
+                .collect(),
+            responded: 1,
+            max_agents: maximum,
+        })
+    }
+
+    #[test]
+    fn fits_agents_at_any_position_including_styles_and_following_segments() {
+        for mut config in [
+            ThemePresets::get_default(),
+            ThemePresets::get_powerline_dark(),
+        ] {
+            for mode in [StyleMode::Plain, StyleMode::NerdFont, StyleMode::Powerline] {
+                config.style.mode = mode;
+                let mut agent_config = config
+                    .segments
+                    .iter()
+                    .find(|s| s.id == SegmentId::Agents)
+                    .unwrap()
+                    .clone();
+                agent_config.enabled = true;
+                let fixed_config = config
+                    .segments
+                    .iter()
+                    .find(|s| s.id == SegmentId::Directory)
+                    .unwrap()
+                    .clone();
+                let fixed = SegmentData {
+                    primary: "目录/e\u{301}".into(),
+                    secondary: "分支".into(),
+                    metadata: Default::default(),
+                };
+                let renderer = StatusLineGenerator::new(config.clone());
+                for position in 0..=2 {
+                    let segments = |maximum| {
+                        let mut data = vec![(fixed_config.clone(), fixed.clone().into()); 2];
+                        data.insert(position, (agent_config.clone(), activity(12, maximum)));
+                        data
+                    };
+                    let expected = renderer.generate(segments(2));
+                    let width = expected.into_text().unwrap().width();
+                    let actual = renderer.generate_with_width(segments(3), Some(width));
+                    assert_eq!(actual, expected, "mode {mode:?}, position {position}");
+                    assert!(actual.contains("+10 more"));
+                    let narrower = renderer.generate_with_width(segments(3), Some(width - 1));
+                    assert!(narrower.contains("+11 more"));
+                    assert!(!narrower.contains("审查员1"));
+                    assert!(narrower.into_text().unwrap().width() < width);
+                    assert_eq!(
+                        renderer.generate_with_width(segments(3), Some(1000)),
+                        renderer.generate(segments(3))
+                    );
+                    // Removing all names must preserve the counts and the other segments.
+                    let counts = renderer.generate(segments(0));
+                    assert_eq!(renderer.generate_with_width(segments(3), Some(1)), counts);
+                    assert!(!counts.contains("more"));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn last_short_name_can_fit_when_the_more_suffix_would_not() {
+        let config = ThemePresets::get_default();
+        let mut segment = config
+            .segments
+            .iter()
+            .find(|s| s.id == SegmentId::Agents)
+            .unwrap()
+            .clone();
+        segment.enabled = true;
+        let summary = AgentSummary {
+            active: vec![
+                ActiveAgent {
+                    name: "A".into(),
+                    elapsed: 1
+                };
+                2
+            ],
+            responded: 0,
+            max_agents: 2,
+        };
+        assert!(summary.text(2).len() < summary.text(1).len());
+        let data = vec![(segment, SegmentContent::Agents(summary))];
+        let renderer = StatusLineGenerator::new(config);
+        let full = renderer.generate(data.clone());
+        let width = full.into_text().unwrap().width();
+        assert_eq!(renderer.generate_with_width(data, Some(width)), full);
+    }
+
+    #[test]
+    fn terminal_cells_exclude_formatting_and_count_unicode_width() {
+        assert_eq!(visible_width("\x1b[38;2;1;2;3m中e\u{301}👩‍💻\x1b[0m"), 5);
+        assert_eq!(
+            visible_width("\x1b]8;;https://example.com\x1b\\中\x1b]8;;\x1b\\"),
+            2
+        );
+        assert_eq!(
+            visible_width("\x1b]8;;https://example.com\x07中\x1b]8;;\x07"),
+            2
+        );
+    }
+
+    #[test]
+    fn columns_reserve_host_spacing_and_reject_invalid_values() {
+        assert_eq!(available_width("120", 4).unwrap(), 116);
+        assert_eq!(available_width("120", 8).unwrap(), 112);
+        assert_eq!(available_width("2", 4).unwrap(), 0);
+        for invalid in ["", "0", "-1", "80.5", "wide"] {
+            assert!(available_width(invalid, 4).is_err());
+        }
+    }
 }

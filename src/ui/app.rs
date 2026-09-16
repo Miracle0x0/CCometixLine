@@ -1,6 +1,7 @@
 use crate::config::{Config, SegmentId, StyleMode};
 use crate::ui::components::{
     color_picker::{ColorPickerComponent, NavDirection},
+    count_input::CountInputComponent,
     help::HelpComponent,
     icon_selector::IconSelectorComponent,
     name_input::NameInputComponent,
@@ -33,6 +34,7 @@ pub struct App {
     color_picker: ColorPickerComponent,
     icon_selector: IconSelectorComponent,
     name_input: NameInputComponent,
+    max_agents_input: CountInputComponent,
     preview: PreviewComponent,
     segment_list: SegmentListComponent,
     separator_editor: SeparatorEditorComponent,
@@ -54,6 +56,7 @@ impl App {
             color_picker: ColorPickerComponent::new(),
             icon_selector: IconSelectorComponent::new(),
             name_input: NameInputComponent::new(),
+            max_agents_input: CountInputComponent::default(),
             preview: PreviewComponent::new(),
             segment_list: SegmentListComponent::new(),
             separator_editor: SeparatorEditorComponent::new(),
@@ -121,7 +124,25 @@ impl App {
                 }
 
                 // Handle popup events first
-                if app.name_input.is_open {
+                if app.max_agents_input.is_open {
+                    match key.code {
+                        KeyCode::Esc => app.max_agents_input.is_open = false,
+                        KeyCode::Enter => app.apply_max_agents(),
+                        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.max_agents_input.input.clear();
+                            app.max_agents_input.error = None;
+                        }
+                        KeyCode::Char(c) => {
+                            app.max_agents_input.input.push(c);
+                            app.max_agents_input.error = None;
+                        }
+                        KeyCode::Backspace => {
+                            app.max_agents_input.input.pop();
+                            app.max_agents_input.error = None;
+                        }
+                        _ => {}
+                    }
+                } else if app.name_input.is_open {
                     match key.code {
                         KeyCode::Esc => app.name_input.close(),
                         KeyCode::Enter => {
@@ -471,6 +492,9 @@ impl App {
         if self.separator_editor.is_open {
             self.separator_editor.render(f, f.area());
         }
+        if self.max_agents_input.is_open {
+            self.max_agents_input.render(f, f.area());
+        }
     }
 
     fn move_selection(&mut self, delta: i32) {
@@ -599,12 +623,31 @@ impl App {
                         }
                     }
                     FieldSelection::Options => {
-                        // TODO: Implement options editor
-                        self.status_message =
-                            Some("Options editor not implemented yet".to_string());
+                        let segment = &self.config.segments[self.selected_segment];
+                        if segment.id == SegmentId::Agents {
+                            match crate::core::segments::AgentsSegment::max_agents(&segment.options)
+                            {
+                                Ok(value) => self.max_agents_input.open(value),
+                                Err(error) => self.status_message = Some(error.to_string()),
+                            }
+                        } else {
+                            self.status_message =
+                                Some("Options editor not implemented yet".to_string());
+                        }
                     }
                 }
             }
+        }
+    }
+
+    fn apply_max_agents(&mut self) {
+        if let Some(value) = self.max_agents_input.value() {
+            self.config.segments[self.selected_segment]
+                .options
+                .insert("max_agents".into(), serde_json::json!(value));
+            self.max_agents_input.is_open = false;
+            self.preview.update_preview(&self.config);
+            self.status_message = Some(format!("Max agents: {value}. Press S to save."));
         }
     }
 
@@ -765,6 +808,55 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect()
+    }
+
+    #[test]
+    fn max_agents_editor_validates_applies_and_round_trips_through_config() {
+        let mut app = App::new(ThemePresets::get_default());
+        app.selected_segment = app
+            .config
+            .segments
+            .iter()
+            .position(|s| s.id == SegmentId::Agents)
+            .unwrap();
+        app.toggle_current();
+        app.switch_panel();
+        app.move_selection(6);
+        assert_eq!(app.selected_field, FieldSelection::Options);
+        assert!(screen(&mut app, 80, 24).contains("Max agents: 3"));
+        app.toggle_current();
+        assert!(app.max_agents_input.is_open);
+        for invalid in ["", "-1", "1.5", "many", "999999999999999999999999999"] {
+            app.max_agents_input.input = invalid.into();
+            app.apply_max_agents();
+            assert!(app.max_agents_input.is_open);
+            assert!(app.max_agents_input.error.is_some());
+            assert_eq!(
+                app.config.segments[app.selected_segment].options["max_agents"],
+                3
+            );
+        }
+        for value in [0, 1, 5] {
+            app.max_agents_input.input = value.to_string();
+            app.apply_max_agents();
+            assert!(!app.max_agents_input.is_open);
+            let config: Config =
+                toml::from_str(&toml::to_string_pretty(&app.config).unwrap()).unwrap();
+            assert_eq!(
+                config.segments[app.selected_segment].options["max_agents"],
+                value
+            );
+            assert!(screen(&mut app, 120, 40).contains(&format!("Max agents: {value}")));
+            app.toggle_current();
+            assert_eq!(app.max_agents_input.input, value.to_string());
+        }
+        // Dismissing the popup leaves the last applied value unchanged.
+        app.max_agents_input.input = "20".into();
+        app.max_agents_input.is_open = false;
+        assert_eq!(
+            app.config.segments[app.selected_segment].options["max_agents"],
+            5
+        );
     }
 
     #[test]

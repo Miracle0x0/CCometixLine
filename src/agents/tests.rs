@@ -199,13 +199,11 @@ fn installation_is_idempotent_and_uninstall_preserves_other_hooks_and_settings()
     integration::configure_at(&data, &path, &exe, true).unwrap();
     let installed = settings(&path);
     let manifest = settings(&data.join("agents-installation.json"));
-    let installation_id = manifest["installation_id"].as_str().unwrap();
-    installation_id
-        .parse::<integration::InstallationId>()
-        .unwrap();
-    assert!(manifest["command"].as_str().unwrap().ends_with(&format!(
-        "--agents-hook --installation-id {installation_id}"
-    )));
+    assert!(manifest["command"]
+        .as_str()
+        .unwrap()
+        .ends_with(" --agents-hook"));
+    assert!(manifest.get("installation_id").is_none());
     assert_eq!(installed["statusLine"]["command"], "custom-status");
     assert_eq!(installed["statusLine"]["refreshInterval"], 2);
     assert!(manifest["command"].as_str().unwrap().contains("'\\''"));
@@ -220,13 +218,17 @@ fn installation_is_idempotent_and_uninstall_preserves_other_hooks_and_settings()
 }
 
 #[test]
-fn uninstall_keeps_user_refresh_changes_and_a_new_install_has_fresh_state() {
+fn uninstall_keeps_user_refresh_changes_and_reinstall_reuses_session_state() {
     let dir = TestDir::new();
     let data = dir.0.join("ccline");
     let path = dir.0.join("settings.json");
     let exe = dir.0.join("ccline");
     integration::configure_at(&data, &path, &exe, true).unwrap();
     let first = settings(&data.join("agents-installation.json"));
+    let store = ActivityStore::new(data.join("agents"));
+    store
+        .record(input("session", start("agent", "Explore")), 100)
+        .unwrap();
     let mut updated = settings(&path);
     updated["statusLine"]["refreshInterval"] = json!(5);
     fs::write(&path, serde_json::to_vec(&updated).unwrap()).unwrap();
@@ -234,28 +236,31 @@ fn uninstall_keeps_user_refresh_changes_and_a_new_install_has_fresh_state() {
     assert_eq!(settings(&path)["statusLine"]["refreshInterval"], 5);
     integration::configure_at(&data, &path, &exe, true).unwrap();
     let second = settings(&data.join("agents-installation.json"));
-    assert_ne!(first["installation_id"], second["installation_id"]);
-    // A delayed event from the old hook writes only to its original installation.
-    let old_store = ActivityStore::new(
-        data.join("agents")
-            .join(first["installation_id"].as_str().unwrap()),
-    );
-    let new_store = ActivityStore::new(
-        data.join("agents")
-            .join(second["installation_id"].as_str().unwrap()),
-    );
-    old_store
-        .record(input("session", start("old", "Explore")), 100)
-        .unwrap();
-    new_store
-        .record(input("session", start("new", "Plan")), 110)
-        .unwrap();
-    old_store
-        .record(input("session", stop("old")), 120)
-        .unwrap();
-    let current = new_store.read("session").unwrap().unwrap();
+    assert_eq!(first["command"], second["command"]);
+    let reopened = ActivityStore::new(data.join("agents"));
+    let current = reopened.read("session").unwrap().unwrap();
     assert_eq!(current.agents.len(), 1);
-    assert!(current.agents["new"].responded_at.is_none());
+    assert_eq!(current.agents["agent"].started_at, 100);
+    assert!(current.agents["agent"].responded_at.is_none());
+    reopened
+        .record(input("session", stop("agent")), 120)
+        .unwrap();
+    assert_eq!(
+        reopened.read("session").unwrap().unwrap().agents["agent"].responded_at,
+        Some(120)
+    );
+    reopened
+        .record(
+            input(
+                "session",
+                HookEvent::SessionStart {
+                    source: "startup".into(),
+                },
+            ),
+            130,
+        )
+        .unwrap();
+    assert!(reopened.read("session").unwrap().unwrap().agents.is_empty());
     assert_eq!(settings(&path)["statusLine"]["refreshInterval"], 5);
     integration::configure_at(&data, &path, &exe, false).unwrap();
     assert_eq!(settings(&path)["statusLine"]["refreshInterval"], 5);

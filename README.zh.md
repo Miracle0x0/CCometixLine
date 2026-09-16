@@ -277,7 +277,7 @@ options = { max_agents = 3 }
 
 自动布局读取 Claude Code 每次调用时设置的 [`COLUMNS`](https://code.claude.com/docs/en/statusline#how-status-lines-work)，按终端显示列计算中文、组合字符和 emoji，ANSI 颜色不占列宽。默认扣除 Claude Code 左右各两列留白；设置了 `statusLine.padding` 时，将状态栏命令设为 `ccline --width-offset N`，其中 `N = 4 + 2 × padding`，例如 `padding = 2` 对应 `--width-offset 8`。有活跃名称需要布局时，缺失或无效的 `COLUMNS` 会明确报错；手动运行时需显式提供列数。窗口尺寸变化在下次调用时生效。
 
-记录按会话 ID 和 agent ID 隔离，并通过进程间文件锁处理并发事件。重复启动事件不会增加计数；恢复子 agent 时重新计时；压缩上下文保留活动记录，启动或恢复会话则重置该会话的观察记录。安装命令使用可读的 UTC 时间标识，例如 `ccline --agents-hook --installation-id 20260916T063000.123456789Z`。每次全新安装在 `~/.claude/ccline/agents/<installation-id>/` 下使用独立目录，重复保存沿用原标识，关闭后重新开启则生成新标识；旧 hook 的延迟事件仍写入旧目录。安装信息保存在 `~/.claude/ccline/agents-installation.json`。
+记录按会话 ID 和 agent ID 隔离，并通过进程间文件锁处理并发事件。重复启动事件不会增加计数；恢复子 agent 时重新计时；压缩上下文保留活动记录，启动或恢复会话则重置该会话的观察记录。hook 命令为 `ccline --agents-hook`，事件数据通过 stdin 读取。所有活动记录直接保存在 `~/.claude/ccline/agents/` 下，关闭后重新开启会保留已有会话记录。`~/.claude/ccline/agents-installation.json` 保存本功能管理的 hook 命令和刷新间隔信息，用于卸载。
 
 汇总依据[官方生命周期 hooks](https://code.claude.com/docs/en/hooks#subagentstart)。`responded` 表示收到 `SubagentStop`，不代表任务成功。这些事件无法可靠区分等待授权、失败、取消或其他 stop hook 要求继续运行的状态，因此使用可配置的活跃颜色，不推断这些细分状态。没有结束事件的异常中断无法从这份数据确认；安装前已在运行的 agent 不会通过扫描转录文件重建。状态或设置文件损坏时会明确报错。
 

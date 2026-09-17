@@ -1,0 +1,8 @@
+{
+  "name": "ccline-agents-mod",
+  "version": "0.1.0",
+  "description": "Experimental in-process subagent activity for CCometixLine.",
+  "author": { "name": "CCometixLine contributors" },
+  "license": "MIT",
+  "defaultEnabled": false
+}

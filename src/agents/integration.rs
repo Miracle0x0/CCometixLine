@@ -1,6 +1,10 @@
 //! Install/uninstall only the hooks owned by the Agents segment.
 
-use super::Result;
+use super::{
+    experimental::{self, Backend},
+    store::{Activity, ActivityStore},
+    Result,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
@@ -19,6 +23,56 @@ const REFRESH_SECONDS: u64 = 2;
 struct Installation {
     command: String,
     added_refresh_interval: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mod_settings: Option<ModSettings>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ModSettings {
+    previous_function_hooks: Option<Value>,
+    previous_plugin_enabled: Option<Value>,
+}
+
+fn replace_setting(
+    settings: &mut Value,
+    section: &str,
+    key: &str,
+    value: Value,
+) -> Result<Option<Value>> {
+    let values = settings
+        .as_object_mut()
+        .ok_or("Claude settings must be an object")?
+        .entry(section)
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .ok_or_else(|| format!("Claude settings.{section} must be an object"))?;
+    Ok(values.insert(key.into(), value))
+}
+
+fn restore_setting(
+    settings: &mut Value,
+    section: &str,
+    key: &str,
+    installed: Value,
+    previous: Option<Value>,
+) -> Result<()> {
+    let Some(values) = settings.get_mut(section) else {
+        return Ok(());
+    };
+    let values = values
+        .as_object_mut()
+        .ok_or_else(|| format!("Claude settings.{section} must be an object"))?;
+    if values.get(key) == Some(&installed) {
+        if let Some(previous) = previous {
+            values.insert(key.into(), previous);
+        } else {
+            values.remove(key);
+        }
+    }
+    if values.is_empty() {
+        settings.as_object_mut().unwrap().remove(section);
+    }
+    Ok(())
 }
 
 fn read_json(path: &Path) -> Result<Option<Value>> {
@@ -71,15 +125,55 @@ fn remove_hooks(settings: &mut Value, command: &str) -> Result<()> {
 
 fn edit_settings(
     settings: &mut Value,
-    previous: Option<Installation>,
+    mut previous: Option<Installation>,
     enabled: bool,
     executable: &str,
+    backend: Backend,
 ) -> Result<Option<Installation>> {
     if !settings.is_object() {
         return Err("Claude settings must be a JSON object".into());
     }
     if let Some(ref installed) = previous {
         remove_hooks(settings, &installed.command)?;
+    }
+    let mut mod_settings = previous
+        .as_mut()
+        .and_then(|installed| installed.mod_settings.take());
+    if !enabled || backend == Backend::Hooks {
+        if let Some(owned) = mod_settings.take() {
+            restore_setting(
+                settings,
+                "env",
+                experimental::ENABLE_ENV,
+                json!("1"),
+                owned.previous_function_hooks,
+            )?;
+            restore_setting(
+                settings,
+                "enabledPlugins",
+                experimental::PLUGIN_KEY,
+                json!(true),
+                owned.previous_plugin_enabled,
+            )?;
+        }
+    } else {
+        let original = ModSettings {
+            previous_function_hooks: replace_setting(
+                settings,
+                "env",
+                experimental::ENABLE_ENV,
+                json!("1"),
+            )?,
+            previous_plugin_enabled: replace_setting(
+                settings,
+                "enabledPlugins",
+                experimental::PLUGIN_KEY,
+                json!(true),
+            )?,
+        };
+        if mod_settings.is_none() {
+            mod_settings = Some(original);
+        }
     }
     if !enabled {
         if previous.is_some_and(|installed| installed.added_refresh_interval) {
@@ -105,18 +199,20 @@ fn edit_settings(
     let command = format!("{quoted} --agents-hook");
     remove_hooks(settings, &command)?;
     let object = settings.as_object_mut().unwrap();
-    let hooks = object
-        .entry("hooks")
-        .or_insert_with(|| json!({}))
-        .as_object_mut()
-        .ok_or("Claude settings.hooks must be an object")?;
-    for event in EVENTS {
-        let groups = hooks
-            .entry(event)
-            .or_insert_with(|| json!([]))
-            .as_array_mut()
-            .ok_or("Claude hook event must be an array")?;
-        groups.push(json!({ "hooks": [{ "type": "command", "command": command }] }));
+    if backend == Backend::Hooks {
+        let hooks = object
+            .entry("hooks")
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .ok_or("Claude settings.hooks must be an object")?;
+        for event in EVENTS {
+            let groups = hooks
+                .entry(event)
+                .or_insert_with(|| json!([]))
+                .as_array_mut()
+                .ok_or("Claude hook event must be an array")?;
+            groups.push(json!({ "hooks": [{ "type": "command", "command": command }] }));
+        }
     }
 
     let statusline = object
@@ -133,24 +229,51 @@ fn edit_settings(
     Ok(Some(Installation {
         command,
         added_refresh_interval,
+        mod_settings,
     }))
 }
 
-pub fn configure(enabled: bool) -> Result<()> {
+pub fn configure(enabled: bool, experimental_mod: bool) -> Result<String> {
     let dir = super::data_dir()?;
     let settings_path = dir
         .parent()
         .ok_or("Missing Claude configuration directory")?
         .join("settings.json");
-    configure_at(&dir, &settings_path, &std::env::current_exe()?, enabled)
+    let selection = if enabled && experimental_mod {
+        experimental::detect()?
+    } else {
+        experimental::Selection {
+            backend: Backend::Hooks,
+            message: if enabled {
+                "Hooks only"
+            } else {
+                "Agents disabled"
+            }
+            .into(),
+        }
+    };
+    configure_at(
+        &dir,
+        &settings_path,
+        &std::env::current_exe()?,
+        enabled,
+        selection.backend,
+    )?;
+    Ok(selection.message)
 }
 
-pub fn active_state_dir() -> Result<Option<std::path::PathBuf>> {
+pub fn read_activity(session: &str) -> Result<Option<Activity>> {
     let dir = super::data_dir()?;
     let installation: Option<Installation> = read_json(&dir.join("agents-installation.json"))?
         .map(serde_json::from_value)
         .transpose()?;
-    Ok(installation.map(|_| dir.join("agents")))
+    match installation {
+        None => Ok(None),
+        Some(installed) if installed.mod_settings.is_some() => {
+            experimental::read_snapshot(session).map(Some)
+        }
+        Some(_) => ActivityStore::new(dir.join("agents")).read(session),
+    }
 }
 
 pub fn configure_at(
@@ -158,6 +281,7 @@ pub fn configure_at(
     settings_path: &Path,
     executable: &Path,
     enabled: bool,
+    backend: Backend,
 ) -> Result<()> {
     let manifest_path = dir.join("agents-installation.json");
     let previous = read_json(&manifest_path)?
@@ -173,12 +297,19 @@ pub fn configure_at(
         previous,
         enabled,
         executable.to_str().ok_or("Executable path is not UTF-8")?,
+        backend,
     )?;
     fs::create_dir_all(dir)?;
     let settings_parent = settings_path
         .parent()
         .ok_or("Missing settings parent directory")?;
     fs::create_dir_all(settings_parent)?;
+    if installation
+        .as_ref()
+        .is_some_and(|installed| installed.mod_settings.is_some())
+    {
+        experimental::install(settings_parent)?;
+    }
     let mut content = serde_json::to_string_pretty(&settings)?;
     content.push('\n');
     fs::write(settings_path, content)?;

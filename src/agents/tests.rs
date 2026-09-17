@@ -1,4 +1,5 @@
 use super::{
+    experimental::Backend,
     integration,
     store::{Activity, ActivityStore},
     HookEvent, HookInput,
@@ -196,7 +197,7 @@ fn installation_is_idempotent_and_uninstall_preserves_other_hooks_and_settings()
             "SessionStart":[{"matcher":"startup", "hooks":[]}],
             "PostToolUse":[{"hooks":[{"type":"command", "command":"formatter"}]}]}});
     fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
-    integration::configure_at(&data, &path, &exe, true).unwrap();
+    integration::configure_at(&data, &path, &exe, true, Backend::Hooks).unwrap();
     let installed = settings(&path);
     let manifest = settings(&data.join("agents-installation.json"));
     assert!(manifest["command"]
@@ -207,13 +208,13 @@ fn installation_is_idempotent_and_uninstall_preserves_other_hooks_and_settings()
     assert_eq!(installed["statusLine"]["command"], "custom-status");
     assert_eq!(installed["statusLine"]["refreshInterval"], 2);
     assert!(manifest["command"].as_str().unwrap().contains("'\\''"));
-    integration::configure_at(&data, &path, &exe, true).unwrap();
+    integration::configure_at(&data, &path, &exe, true, Backend::Hooks).unwrap();
     assert_eq!(settings(&path), installed);
     assert_eq!(settings(&data.join("agents-installation.json")), manifest);
-    integration::configure_at(&data, &path, &exe, false).unwrap();
+    integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
     assert_eq!(settings(&path), original);
     assert!(!data.join("agents-installation.json").exists());
-    integration::configure_at(&data, &path, &exe, false).unwrap();
+    integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
     assert_eq!(settings(&path), original);
 }
 
@@ -223,7 +224,7 @@ fn uninstall_keeps_user_refresh_changes_and_reinstall_reuses_session_state() {
     let data = dir.0.join("ccline");
     let path = dir.0.join("settings.json");
     let exe = dir.0.join("ccline");
-    integration::configure_at(&data, &path, &exe, true).unwrap();
+    integration::configure_at(&data, &path, &exe, true, Backend::Hooks).unwrap();
     let first = settings(&data.join("agents-installation.json"));
     let store = ActivityStore::new(data.join("agents"));
     store
@@ -232,9 +233,9 @@ fn uninstall_keeps_user_refresh_changes_and_reinstall_reuses_session_state() {
     let mut updated = settings(&path);
     updated["statusLine"]["refreshInterval"] = json!(5);
     fs::write(&path, serde_json::to_vec(&updated).unwrap()).unwrap();
-    integration::configure_at(&data, &path, &exe, false).unwrap();
+    integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
     assert_eq!(settings(&path)["statusLine"]["refreshInterval"], 5);
-    integration::configure_at(&data, &path, &exe, true).unwrap();
+    integration::configure_at(&data, &path, &exe, true, Backend::Hooks).unwrap();
     let second = settings(&data.join("agents-installation.json"));
     assert_eq!(first["command"], second["command"]);
     let reopened = ActivityStore::new(data.join("agents"));
@@ -262,7 +263,7 @@ fn uninstall_keeps_user_refresh_changes_and_reinstall_reuses_session_state() {
         .unwrap();
     assert!(reopened.read("session").unwrap().unwrap().agents.is_empty());
     assert_eq!(settings(&path)["statusLine"]["refreshInterval"], 5);
-    integration::configure_at(&data, &path, &exe, false).unwrap();
+    integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
     assert_eq!(settings(&path)["statusLine"]["refreshInterval"], 5);
 }
 
@@ -272,7 +273,7 @@ fn invalid_settings_fail_without_installation_or_file_changes_and_disabled_is_in
     let data = dir.0.join("ccline");
     let path = dir.0.join("settings.json");
     let exe = dir.0.join("ccline");
-    integration::configure_at(&data, &path, &exe, false).unwrap();
+    integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
     assert!(!data.exists());
     assert!(!path.exists());
     for invalid in [
@@ -282,7 +283,7 @@ fn invalid_settings_fail_without_installation_or_file_changes_and_disabled_is_in
         r#"{"hooks":{"SubagentStart":{}}}"#,
     ] {
         fs::write(&path, invalid).unwrap();
-        assert!(integration::configure_at(&data, &path, &exe, true).is_err());
+        assert!(integration::configure_at(&data, &path, &exe, true, Backend::Hooks).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
         assert!(!data.exists());
     }
@@ -459,4 +460,118 @@ fn preview_lists_sample_agents_with_the_configured_limit_and_shows_option_errors
     assert!(preview
         .get_preview_cache()
         .contains("max_agents must be a non-negative integer, not \"many\""));
+}
+
+#[test]
+fn experimental_selection_requires_the_baseline_and_reports_hook_fallback() {
+    use super::experimental;
+    for version in [None, Some("2.1.272 (Claude Code)"), Some("2.1.273-beta.1")] {
+        let selection = experimental::select(version).unwrap();
+        assert_eq!(selection.backend, Backend::Hooks);
+        assert!(selection.message.contains("Hooks only"));
+    }
+    for version in ["2.1.273 (Claude Code)", "2.1.274 (Claude Code)"] {
+        assert_eq!(
+            experimental::select(Some(version)).unwrap().backend,
+            Backend::Mod
+        );
+    }
+    assert!(experimental::select(Some("not a version")).is_err());
+    let options = |value| serde_json::from_value(value).unwrap();
+    assert!(!AgentsSegment::experimental_mod(&options(json!({}))).unwrap());
+    assert!(AgentsSegment::experimental_mod(&options(json!({"experimental_mod":true}))).unwrap());
+    assert!(AgentsSegment::experimental_mod(&options(json!({"experimental_mod":"true"}))).is_err());
+}
+
+#[test]
+fn mod_installation_switches_backends_without_changing_other_integrations() {
+    use super::experimental;
+    let dir = TestDir::new();
+    let data = dir.0.join("ccline");
+    let path = dir.0.join("settings.json");
+    let exe = dir.0.join("ccline");
+    let original = json!({
+        "env":{"CUSTOM":"keep"}, "enabledPlugins":{"other@market":true},
+        "statusLine":{"type":"command","command":"existing-status"},
+        "hooks":{"SubagentStart":[{"hooks":[{"type":"command","command":"audit"}]}]}
+    });
+    fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
+    integration::configure_at(&data, &path, &exe, true, Backend::Hooks).unwrap();
+    let hooks = settings(&path);
+    integration::configure_at(&data, &path, &exe, true, Backend::Mod).unwrap();
+    let native = settings(&path);
+    let manifest = settings(&data.join("agents-installation.json"));
+    assert_eq!(native["hooks"], original["hooks"]);
+    assert_eq!(native["env"][experimental::ENABLE_ENV], "1");
+    assert_eq!(native["env"]["CUSTOM"], "keep");
+    assert_eq!(native["enabledPlugins"][experimental::PLUGIN_KEY], true);
+    assert_eq!(native["enabledPlugins"]["other@market"], true);
+    let plugin = dir.0.join("skills").join(experimental::PLUGIN_NAME);
+    assert_eq!(
+        settings(&plugin.join(".claude-plugin/plugin.json"))["defaultEnabled"],
+        false
+    );
+    assert!(plugin.join("hooks/register.ts").is_file());
+    assert!(plugin.join("hooks/activity.ts").is_file());
+    integration::configure_at(&data, &path, &exe, true, Backend::Mod).unwrap();
+    assert_eq!(settings(&path), native);
+    assert_eq!(settings(&data.join("agents-installation.json")), manifest);
+    integration::configure_at(
+        &data,
+        &path,
+        &exe,
+        true,
+        experimental::select(Some("2.1.272")).unwrap().backend,
+    )
+    .unwrap();
+    assert_eq!(settings(&path), hooks);
+    integration::configure_at(&data, &path, &exe, true, Backend::Mod).unwrap();
+    integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
+    assert_eq!(settings(&path), original);
+    assert!(!data.join("agents-installation.json").exists());
+}
+
+#[test]
+fn disabling_mod_restores_owned_values_and_preserves_later_user_edits() {
+    use super::experimental;
+    let dir = TestDir::new();
+    let data = dir.0.join("ccline");
+    let path = dir.0.join("settings.json");
+    let exe = dir.0.join("ccline");
+    let original = json!({"env":{experimental::ENABLE_ENV:"0"}, "enabledPlugins":{experimental::PLUGIN_KEY:false}, "statusLine":{"command":"custom","type":"command"}});
+    fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
+    integration::configure_at(&data, &path, &exe, true, Backend::Mod).unwrap();
+    integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
+    assert_eq!(settings(&path), original);
+    integration::configure_at(&data, &path, &exe, true, Backend::Mod).unwrap();
+    let mut edited = settings(&path);
+    edited["env"][experimental::ENABLE_ENV] = json!("false");
+    edited["enabledPlugins"][experimental::PLUGIN_KEY] = json!(false);
+    fs::write(&path, serde_json::to_vec(&edited).unwrap()).unwrap();
+    integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
+    assert_eq!(settings(&path)["env"][experimental::ENABLE_ENV], "false");
+    assert_eq!(
+        settings(&path)["enabledPlugins"][experimental::PLUGIN_KEY],
+        false
+    );
+}
+
+#[test]
+fn mod_snapshot_uses_the_requested_session_and_invalid_snapshots_are_errors() {
+    use super::experimental::parse_snapshot;
+    let snapshot = json!({"sessions":{
+        "one":{"agents":{"a":{"agent_type":"Explore","started_at":100,"responded_at":null}},"ended":false},
+        "two":{"agents":{},"ended":true}
+    }}).to_string();
+    assert!(
+        render(Some(&parse_snapshot(&snapshot, "one").unwrap()), 110)
+            .unwrap()
+            .text(3)
+            .contains("Explore 10s")
+    );
+    assert!(render(Some(&parse_snapshot(&snapshot, "two").unwrap()), 110).is_none());
+    assert!(parse_snapshot(&snapshot, "missing").is_err());
+    for malformed in ["{", "{}", "null", r#"{"sessions":{"one":{"agents":{}}}}"#] {
+        assert!(parse_snapshot(malformed, "one").is_err());
+    }
 }

@@ -1,8 +1,4 @@
-use crate::agents::{
-    self,
-    store::{Activity, ActivityStore},
-    Result,
-};
+use crate::agents::{self, store::Activity, Result};
 use crate::config::InputData;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -19,16 +15,22 @@ impl AgentsSegment {
     ) -> Result<Option<AgentSummary>> {
         // Validate the configuration before reading state, even when hooks are not installed.
         let max_agents = Self::max_agents(options)?;
-        let Some(root) = agents::integration::active_state_dir()? else {
-            return Ok(None);
-        };
-        let store = ActivityStore::new(root);
-        let activity = store.read(&input.session_id)?;
+        Self::experimental_mod(options)?;
+        let activity = agents::integration::read_activity(&input.session_id)?;
         Ok(Self::render(
             activity.as_ref(),
             agents::store::now()?,
             max_agents,
         ))
+    }
+
+    pub fn experimental_mod(options: &HashMap<String, Value>) -> Result<bool> {
+        match options.get("experimental_mod") {
+            None => Ok(false),
+            Some(value) => value.as_bool().ok_or_else(|| {
+                format!("Agents option experimental_mod must be a boolean, not {value}").into()
+            }),
+        }
     }
 
     /// The `max_agents` option: absent means the default; anything but a count is an error.

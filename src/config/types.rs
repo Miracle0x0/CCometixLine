@@ -255,6 +255,19 @@ impl Config {
             .any(|segment| segment.id == SegmentId::Agents && segment.enabled)
     }
 
+    pub fn agents_experimental_mod(&self) -> crate::agents::Result<bool> {
+        match self
+            .segments
+            .iter()
+            .find(|s| s.id == SegmentId::Agents && s.enabled)
+        {
+            Some(segment) => {
+                crate::core::segments::AgentsSegment::experimental_mod(&segment.options)
+            }
+            None => Ok(false),
+        }
+    }
+
     /// Check if current config matches the specified theme preset
     pub fn matches_theme(&self, theme_name: &str) -> bool {
         let theme_preset = crate::ui::themes::ThemePresets::get_theme(theme_name);

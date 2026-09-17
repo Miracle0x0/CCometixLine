@@ -1,5 +1,6 @@
 //! Claude Code hook input and session-scoped subagent activity.
 
+pub mod experimental;
 pub mod integration;
 pub mod store;
 

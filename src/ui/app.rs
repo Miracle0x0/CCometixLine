@@ -232,13 +232,10 @@ impl App {
                                 app.name_input.open("Save as New Theme", "Enter theme name");
                             } else {
                                 // s: Save config to config.toml
-                                if let Err(e) = app.save_config() {
-                                    app.status_message =
-                                        Some(format!("Failed to save config: {}", e));
-                                } else {
-                                    app.status_message =
-                                        Some("Configuration and agent hooks saved.".to_string());
-                                }
+                                app.status_message = Some(match app.save_config() {
+                                    Ok(message) => format!("Saved. {message}"),
+                                    Err(error) => format!("Failed to save config: {error}"),
+                                });
                             }
                         }
                         KeyCode::Char('w') | KeyCode::Char('W') => {
@@ -507,7 +504,12 @@ impl App {
                 self.selected_segment = new_selection;
             }
             Panel::Settings => {
-                let field_count = 7; // Enabled, Icon, IconColor, TextColor, TextStyle, BackgroundColor, Options
+                let field_count =
+                    if self.config.segments[self.selected_segment].id == SegmentId::Agents {
+                        8
+                    } else {
+                        7
+                    };
                 let current_field = match self.selected_field {
                     FieldSelection::Enabled => 0i32,
                     FieldSelection::Icon => 1,
@@ -516,6 +518,7 @@ impl App {
                     FieldSelection::BackgroundColor => 4,
                     FieldSelection::TextStyle => 5,
                     FieldSelection::Options => 6,
+                    FieldSelection::ExperimentalMod => 7,
                 };
                 let new_field = (current_field + delta).clamp(0, field_count - 1) as usize;
                 self.selected_field = match new_field {
@@ -526,6 +529,7 @@ impl App {
                     4 => FieldSelection::BackgroundColor,
                     5 => FieldSelection::TextStyle,
                     6 => FieldSelection::Options,
+                    7 => FieldSelection::ExperimentalMod,
                     _ => FieldSelection::Enabled,
                 };
             }
@@ -622,6 +626,23 @@ impl App {
                             self.preview.update_preview(&self.config);
                         }
                     }
+                    FieldSelection::ExperimentalMod => {
+                        let segment = &mut self.config.segments[self.selected_segment];
+                        match crate::core::segments::AgentsSegment::experimental_mod(
+                            &segment.options,
+                        ) {
+                            Ok(enabled) => {
+                                segment
+                                    .options
+                                    .insert("experimental_mod".into(), serde_json::json!(!enabled));
+                                self.status_message = Some(format!(
+                                    "Experimental Mod {}. Press S to detect and apply.",
+                                    if enabled { "off" } else { "on" }
+                                ));
+                            }
+                            Err(error) => self.status_message = Some(error.to_string()),
+                        }
+                    }
                     FieldSelection::Options => {
                         let segment = &self.config.segments[self.selected_segment];
                         if segment.id == SegmentId::Agents {
@@ -652,6 +673,11 @@ impl App {
     }
 
     fn switch_panel(&mut self) {
+        if self.selected_field == FieldSelection::ExperimentalMod
+            && self.config.segments[self.selected_segment].id != SegmentId::Agents
+        {
+            self.selected_field = FieldSelection::Enabled;
+        }
         self.selected_panel = match self.selected_panel {
             Panel::SegmentList => Panel::Settings,
             Panel::Settings => Panel::SegmentList,
@@ -711,6 +737,7 @@ impl App {
         self.config =
             Self::with_optional_segments(crate::ui::themes::ThemePresets::get_theme(theme_name));
         self.selected_segment = 0;
+        self.selected_field = FieldSelection::Enabled;
         self.preview.update_preview(&self.config);
         self.status_message = Some(format!("Switched to {} theme", theme_name));
     }
@@ -722,14 +749,18 @@ impl App {
             &current_theme,
         ));
         self.selected_segment = 0;
+        self.selected_field = FieldSelection::Enabled;
         self.preview.update_preview(&self.config);
         self.status_message = Some(format!("Reset {} theme to defaults", current_theme));
     }
 
-    fn save_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        crate::agents::integration::configure(self.config.agents_enabled())?;
+    fn save_config(&mut self) -> Result<String, Box<dyn std::error::Error>> {
+        let message = crate::agents::integration::configure(
+            self.config.agents_enabled(),
+            self.config.agents_experimental_mod()?,
+        )?;
         self.config.save()?;
-        Ok(())
+        Ok(message)
     }
 
     /// Move the currently selected segment up in the list
@@ -808,6 +839,34 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect()
+    }
+
+    #[test]
+    fn experimental_mod_is_an_opt_in_agents_setting_saved_in_config() {
+        let mut app = App::new(ThemePresets::get_default());
+        app.selected_segment = app
+            .config
+            .segments
+            .iter()
+            .position(|s| s.id == SegmentId::Agents)
+            .unwrap();
+        app.toggle_current();
+        assert!(!app.config.agents_experimental_mod().unwrap());
+        app.switch_panel();
+        app.move_selection(7);
+        assert_eq!(app.selected_field, FieldSelection::ExperimentalMod);
+        assert!(screen(&mut app, 80, 24).contains("Experimental Mod: Off"));
+        app.toggle_current();
+        assert!(app.config.agents_experimental_mod().unwrap());
+        assert!(screen(&mut app, 80, 24).contains("Experimental Mod: On"));
+        let saved = toml::to_string_pretty(&app.config).unwrap();
+        let mut reopened = App::new(toml::from_str(&saved).unwrap());
+        assert!(reopened.config.agents_experimental_mod().unwrap());
+        reopened.selected_panel = Panel::Settings;
+        reopened.selected_field = FieldSelection::ExperimentalMod;
+        reopened.switch_to_theme("minimal");
+        assert_eq!(reopened.selected_field, FieldSelection::Enabled);
+        assert!(!reopened.config.agents_experimental_mod().unwrap());
     }
 
     #[test]

@@ -33,6 +33,9 @@ impl ThemePresets {
             serde_json::json!(crate::core::segments::AgentsSegment::DEFAULT_MAX_AGENTS),
         )]);
         segment
+            .options
+            .insert("experimental_mod".into(), serde_json::json!(false));
+        segment
     }
 
     /// Default Effort appearance, independent of the configured Model segment.

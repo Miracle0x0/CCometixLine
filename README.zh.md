@@ -257,7 +257,7 @@ options = {}
 
 ### 子 agent 运行状态
 
-**所有内置主题默认关闭 Agents。** 运行 `ccline --config`，选中 **Agents**，按 **Enter** 开启，再按 **S** 保存。保存时会在 `~/.claude/settings.json` 安装 `SessionStart`、`SubagentStart`、`SubagentStop` 和 `SessionEnd` 命令 hooks。没有配置状态栏时会同时配置 ccline；已有状态栏命令保持不变。未设置 `refreshInterval` 时会添加两秒刷新，使主会话空闲时也能更新后台活动。
+**所有内置主题默认关闭 Agents。** 运行 `ccline --config`，选中 **Agents**，按 **Enter** 开启，再按 **S** 保存。默认后端在保存时会在 `~/.claude/settings.json` 安装 `SessionStart`、`SubagentStart`、`SubagentStop` 和 `SessionEnd` 命令 hooks。没有配置状态栏时会同时配置 ccline；已有状态栏命令保持不变。未设置 `refreshInterval` 时会添加两秒刷新，使主会话空闲时也能更新后台活动。
 
 关闭 **Agents** 并按 **S** 保存即可卸载对应 hooks，保留其他 hooks 和设置。本功能添加的刷新间隔若未被修改，会在卸载时移除；原有或后来手动修改的间隔保持不变。未保存的切换只影响预览。**W** 和 **Ctrl+S** 只保存主题文件，不改变 hooks 安装状态；**S** 才会应用活动开关。配置或主题没有 Agents 条目时，TUI 会将其作为默认关闭的选项显示。
 
@@ -272,14 +272,22 @@ enabled = true
 icon = { plain = "A", nerd_font = "\uf0c0" }
 colors = { icon = { c16 = 6 }, text = { c16 = 6 } }
 styles = { text_bold = false }
-options = { max_agents = 3 }
+options = { max_agents = 3, experimental_mod = false }
 ```
 
 自动布局读取 Claude Code 每次调用时设置的 [`COLUMNS`](https://code.claude.com/docs/en/statusline#how-status-lines-work)，按终端显示列计算中文、组合字符和 emoji，ANSI 颜色不占列宽。默认扣除 Claude Code 左右各两列留白；设置了 `statusLine.padding` 时，将状态栏命令设为 `ccline --width-offset N`，其中 `N = 4 + 2 × padding`，例如 `padding = 2` 对应 `--width-offset 8`。有活跃名称需要布局时，缺失或无效的 `COLUMNS` 会明确报错；手动运行时需显式提供列数。窗口尺寸变化在下次调用时生效。
 
-记录按会话 ID 和 agent ID 隔离，并通过进程间文件锁处理并发事件。重复启动事件不会增加计数；恢复子 agent 时重新计时；压缩上下文保留活动记录，启动或恢复会话则重置该会话的观察记录。hook 命令为 `ccline --agents-hook`，事件数据通过 stdin 读取。所有活动记录直接保存在 `~/.claude/ccline/agents/` 下，关闭后重新开启会保留已有会话记录。`~/.claude/ccline/agents-installation.json` 保存本功能管理的 hook 命令和刷新间隔信息，用于卸载。
+记录按会话 ID 和 agent ID 隔离，并通过进程间文件锁处理并发事件。重复启动事件不会增加计数；恢复子 agent 时重新计时；压缩上下文保留活动记录，启动或恢复会话则重置该会话的观察记录。hook 命令为 `ccline --agents-hook`，事件数据通过 stdin 读取。该默认 hooks 后端将所有活动记录直接保存在 `~/.claude/ccline/agents/` 下，关闭后重新开启会保留已有会话记录。`~/.claude/ccline/agents-installation.json` 保存本功能管理的 hook 命令和刷新间隔信息，用于卸载。
 
 汇总依据[官方生命周期 hooks](https://code.claude.com/docs/en/hooks#subagentstart)。`responded` 表示收到 `SubagentStop`，不代表任务成功。这些事件无法可靠区分等待授权、失败、取消或其他 stop hook 要求继续运行的状态，因此使用可配置的活跃颜色，不推断这些细分状态。没有结束事件的异常中断无法从这份数据确认；安装前已在运行的 agent 不会通过扫描转录文件重建。状态或设置文件损坏时会明确报错。
+
+### 实验性 Agents Mod
+
+**Experimental Mod 默认关闭。** 在 Agents 设置面板中选中 **Experimental Mod**，按 **Enter** 切换，再按 **S** 保存；配置文件对应 Agents 条目 `options` 中的 `experimental_mod = true`。保存时通过 PATH 中的 `claude --version` 检测版本：Claude Code **2.1.273 或更新版本**选择 Mod；版本较旧或找不到 CLI 时使用原有 hooks 后端，TUI 会显示原因。版本检测在保存时执行，更换 Claude Code 版本后需重新保存。切换后端后重启 Claude Code 生效。
+
+Mod 模式将内嵌插件部署到 `~/.claude/skills/ccline-agents-mod/`，启用该插件和宿主的 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` 实验开关，并且**仅移除 ccline 添加的四个生命周期命令 hooks**。其他 hooks 保留，Mod 通过 `next` 继续执行它们。关闭实验模式会恢复命令 hooks，并恢复由本工具修改且未被用户再次修改的宿主设置。部署的插件在没有显式启用设置时默认关闭。开启宿主实验开关也会允许其他已启用插件的 Function Hooks 运行。
+
+Mod 在进程内接收同样的生命周期事件，通过 `CCLINE_AGENTS_SNAPSHOT` 将活动快照传给状态栏子进程，省去每次事件启动 ccline 命令进程，以及活动文件的读写和锁操作。显示仍使用现有 Rust 渲染器、耗时计算、`max_agents`、列宽适配和刷新间隔。Mod 状态保存在内存中，不重建插件加载前或重新加载期间错过的事件。Mod 快照缺失或损坏时会明确报错，不会静默读取旧 hook 记录。该 API 处于 Early Access；源码依据和验证范围见[组件文档](mods/agents/README.md)。
 
 ### 模型配置 (`models.toml`)
 

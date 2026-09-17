@@ -265,7 +265,7 @@ Set `enabled = false` to hide Effort. The value comes directly from the statusli
 
 ### Subagent Activity
 
-**Agents is disabled by default in every built-in theme.** Run `ccline --config`, select **Agents**, press **Enter** to enable it, then **S** to save. Saving installs the `SessionStart`, `SubagentStart`, `SubagentStop`, and `SessionEnd` command hooks in `~/.claude/settings.json`. If there is no status line configured, it also configures ccline as the status line. An existing status line command is preserved. When no `refreshInterval` is configured, ccline adds a two-second refresh so background activity updates while the main session is idle.
+**Agents is disabled by default in every built-in theme.** Run `ccline --config`, select **Agents**, press **Enter** to enable it, then **S** to save. With the default backend, saving installs the `SessionStart`, `SubagentStart`, `SubagentStop`, and `SessionEnd` command hooks in `~/.claude/settings.json`. If there is no status line configured, it also configures ccline as the status line. An existing status line command is preserved. When no `refreshInterval` is configured, ccline adds a two-second refresh so background activity updates while the main session is idle.
 
 Disable **Agents** and press **S** to uninstall its hooks. Other hooks and settings are preserved. A refresh interval added by ccline is removed on uninstall if it is still unchanged; an existing or subsequently edited interval is preserved. Unsaved edits only affect the preview. **W** and **Ctrl+S** save theme files without changing the hook installation; **S** applies the activity toggle. Configurations and themes without an Agents entry show it as a disabled option in the TUI.
 
@@ -280,14 +280,22 @@ enabled = true
 icon = { plain = "A", nerd_font = "\uf0c0" }
 colors = { icon = { c16 = 6 }, text = { c16 = 6 } }
 styles = { text_bold = false }
-options = { max_agents = 3 }
+options = { max_agents = 3, experimental_mod = false }
 ```
 
 Automatic layout reads [`COLUMNS`](https://code.claude.com/docs/en/statusline#how-status-lines-work), which Claude Code sets for each invocation. Width is measured in terminal cells, accounting for CJK text, combining characters, and emoji; ANSI colors take no space. By default ccline reserves Claude Code's two-column margin on each side. If you set `statusLine.padding`, use the status line command `ccline --width-offset N`, where `N = 4 + 2 × padding`; for example, `padding = 2` needs `--width-offset 8`. Missing or invalid `COLUMNS` produces an explicit error when active names require layout; supply it when invoking ccline manually. Window resizing takes effect on the next invocation.
 
-Activity is keyed by session ID and agent ID, with process locking for concurrent hook events. Repeated starts do not increase the count, a resumed agent starts a new elapsed-time measurement, compaction preserves activity, and starting or resuming a session resets that session's observations. The hook command is `ccline --agents-hook`, with event data read from stdin. All activity is stored directly under `~/.claude/ccline/agents/`; disabling and re-enabling keeps the existing session records. The installation manifest at `~/.claude/ccline/agents-installation.json` tracks the managed hook command and refresh interval for uninstalling.
+Activity is keyed by session ID and agent ID, with process locking for concurrent hook events. Repeated starts do not increase the count, a resumed agent starts a new elapsed-time measurement, compaction preserves activity, and starting or resuming a session resets that session's observations. The hook command is `ccline --agents-hook`, with event data read from stdin. With this default hooks backend, all activity is stored directly under `~/.claude/ccline/agents/`; disabling and re-enabling keeps the existing session records. The installation manifest at `~/.claude/ccline/agents-installation.json` tracks the managed hook command and refresh interval for uninstalling.
 
 The summary reflects [official lifecycle hook events](https://code.claude.com/docs/en/hooks#subagentstart). `responded` means a `SubagentStop` event was observed, not that a task succeeded. These hooks do not reliably distinguish waiting for permission, failure, cancellation, or continuation requested by another stop hook, so the segment uses the configured active color instead of inferring those states. An interruption without an end event cannot be confirmed from this data. Agents that were already running before installation are not reconstructed from transcript files. Malformed state or settings files produce explicit errors.
+
+### Experimental Agents Mod
+
+**Experimental Mod is off by default.** In the Agents settings panel, select **Experimental Mod**, press **Enter** to toggle it, then **S** to save. The configuration option is `experimental_mod = true` under the Agents entry's `options`. Saving checks `claude --version` from PATH: Claude Code **2.1.273 or newer** selects the Mod; an older or unavailable CLI selects the existing hooks backend and the TUI reports why. Detection happens on save, so save again after changing Claude Code versions. Restart Claude Code after switching backends.
+
+Mod mode installs the bundled plugin under `~/.claude/skills/ccline-agents-mod/`, enables it and the host's `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` experiment, and removes **only ccline's four lifecycle command hooks**. Other hooks remain in place and continue through the Mod's `next` calls. Turning the experiment off restores the command hooks and restores the host settings ccline changed if they are still unchanged. The deployed plugin defaults to disabled when no enable setting is present. Enabling the host experiment also permits function hooks in other enabled plugins.
+
+The Mod consumes the same lifecycle events in process and publishes activity through `CCLINE_AGENTS_SNAPSHOT`, inherited by status line processes. This removes ccline's per-event command processes and activity-file reads, writes, and locks. The existing Rust renderer, elapsed times, `max_agents`, width fitting, and refresh interval remain in use. Mod activity is held in memory; it does not reconstruct events missed before plugin loading or after a reload. Missing or malformed Mod snapshots produce explicit errors instead of silently reading old hook records. The API is Early Access; the [component documentation](mods/agents/README.md) records the source baseline and validation scope.
 
 ### Model Configuration (`models.toml`)
 

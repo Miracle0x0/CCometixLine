@@ -1,4 +1,4 @@
-//! Claude Code hook input and session-scoped subagent activity.
+//! Claude Code hook input and subagent activity grouped by process and session.
 
 pub mod experimental;
 pub mod integration;
@@ -25,7 +25,9 @@ pub enum HookEvent {
     SessionStart {
         source: String,
     },
-    SessionEnd,
+    SessionEnd {
+        reason: SessionEndReason,
+    },
     SubagentStart {
         agent_id: String,
         agent_type: String,
@@ -34,6 +36,28 @@ pub enum HookEvent {
         agent_id: String,
         agent_type: String,
     },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionEndReason {
+    Clear,
+    Resume,
+    Logout,
+    PromptInputExit,
+    Other,
+}
+
+impl SessionEndReason {
+    pub fn exits_process(&self) -> bool {
+        matches!(self, Self::Logout | Self::PromptInputExit | Self::Other)
+    }
+}
+
+pub fn claude_process_id() -> Result<u32> {
+    let value = std::env::var("CLAUDE_PID")
+        .map_err(|error| format!("Cannot identify the Claude Code process: CLAUDE_PID {error}"))?;
+    Ok(value.parse::<std::num::NonZeroU32>()?.get())
 }
 
 pub fn data_dir() -> Result<PathBuf> {

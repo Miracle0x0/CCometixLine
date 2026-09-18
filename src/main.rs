@@ -10,8 +10,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cli.agents_hook {
         use ccometixline::agents::{self, store::ActivityStore, HookInput};
         let input: HookInput = serde_json::from_reader(io::stdin().lock())?;
-        ActivityStore::new(agents::data_dir()?.join("agents"))
-            .record(input, agents::store::now()?)?;
+        ActivityStore::new(
+            agents::data_dir()?.join("agents"),
+            agents::claude_process_id()?,
+        )
+        .record(input, agents::store::now()?)?;
         return Ok(());
     }
 

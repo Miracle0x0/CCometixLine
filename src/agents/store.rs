@@ -1,4 +1,4 @@
-use super::{HookEvent, HookInput, Result};
+use super::{HookEvent, HookInput, Result, SessionEndReason};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::{self, File};
@@ -27,7 +27,7 @@ impl Activity {
                     *self = Self::default();
                 }
             }
-            HookEvent::SessionEnd => self.ended = true,
+            HookEvent::SessionEnd { .. } => self.ended = true,
             HookEvent::SubagentStart {
                 agent_id,
                 agent_type,
@@ -54,22 +54,26 @@ impl Activity {
     }
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
+struct ProcessActivity {
+    sessions: BTreeMap<String, Activity>,
+}
+
 pub struct ActivityStore {
     root: PathBuf,
+    process_id: u32,
 }
 
 impl ActivityStore {
-    pub fn new(root: PathBuf) -> Self {
-        Self { root }
+    pub fn new(root: PathBuf, process_id: u32) -> Self {
+        Self { root, process_id }
     }
 
-    fn path(&self, session_id: &str) -> PathBuf {
-        // Encode the complete ID so it is always a single filename, without collisions.
-        let key: String = session_id.bytes().map(|b| format!("{b:02x}")).collect();
-        self.root.join(format!("{key}.json"))
+    fn path(&self) -> PathBuf {
+        self.root.join(format!("{}.json", self.process_id))
     }
 
-    fn read_file(path: &Path) -> Result<Option<Activity>> {
+    fn read_file(path: &Path) -> Result<Option<ProcessActivity>> {
         match File::open(path) {
             Ok(file) => Ok(Some(serde_json::from_reader(file)?)),
             Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
@@ -78,31 +82,84 @@ impl ActivityStore {
     }
 
     pub fn read(&self, session_id: &str) -> Result<Option<Activity>> {
-        let path = self.path(session_id);
+        let path = self.path();
         let lock = match File::open(path.with_extension("lock")) {
             Ok(file) => file,
             Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error.into()),
         };
         lock.lock_shared()?;
-        Self::read_file(&path)
+        if lock.metadata()?.len() != 0 {
+            return Ok(None);
+        }
+        Ok(Self::read_file(&path)?.and_then(|mut state| state.sessions.remove(session_id)))
     }
 
     pub fn record(&self, input: HookInput, now: u64) -> Result<()> {
-        fs::create_dir_all(&self.root)?;
-        let path = self.path(&input.session_id);
-        // A separate lock file serializes readers and writers across CLI processes.
-        let lock = File::options()
+        let starting = matches!(input.event, HookEvent::SessionStart { .. });
+        if starting {
+            fs::create_dir_all(&self.root)?;
+        }
+        let path = self.path();
+        let lock_path = path.with_extension("lock");
+        // Only SessionStart opens a process lifetime. Late subagent events cannot reopen it.
+        let lock = match File::options()
             .read(true)
             .write(true)
-            .create(true)
+            .create(starting)
             .truncate(false)
-            .open(path.with_extension("lock"))?;
+            .open(&lock_path)
+        {
+            Ok(file) => file,
+            Err(error) if !starting && error.kind() == ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
         lock.lock()?;
-        let mut activity = Self::read_file(&path)?.unwrap_or_default();
+        if matches!(&input.event, HookEvent::SessionEnd { reason } if reason.exits_process()) {
+            Self::remove_file(&path)?;
+            // Retire handles already waiting on this lock before unlinking its name.
+            // Those hooks must not recreate the activity file after cleanup.
+            lock.set_len(1)?;
+            Self::remove_file(&lock_path)?;
+            return Ok(());
+        }
+        if lock.metadata()?.len() != 0 {
+            return Ok(());
+        }
+        let mut state = Self::read_file(&path)?.unwrap_or_default();
+        if matches!(
+            input.event,
+            HookEvent::SessionEnd {
+                reason: SessionEndReason::Clear
+            }
+        ) {
+            state.sessions.remove(&input.session_id);
+            if state.sessions.is_empty() {
+                Self::remove_file(&path)?;
+            } else {
+                fs::write(path, serde_json::to_vec(&state)?)?;
+            }
+            return Ok(());
+        }
+        let activity = if starting {
+            state.sessions.entry(input.session_id).or_default()
+        } else {
+            let Some(activity) = state.sessions.get_mut(&input.session_id) else {
+                return Ok(());
+            };
+            activity
+        };
         activity.apply(input.event, now);
-        fs::write(path, serde_json::to_vec(&activity)?)?;
+        fs::write(path, serde_json::to_vec(&state)?)?;
         Ok(())
+    }
+
+    fn remove_file(path: &Path) -> Result<()> {
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
     }
 }
 

@@ -2,7 +2,7 @@ use super::{
     experimental::Backend,
     integration,
     store::{Activity, ActivityStore},
-    HookEvent, HookInput,
+    HookEvent, HookInput, SessionEndReason,
 };
 use crate::core::segments::{AgentsSegment, SegmentData};
 use serde_json::{json, Value};
@@ -41,6 +41,14 @@ fn stop(id: &str) -> HookEvent {
         agent_id: id.into(),
         agent_type: "Explore".into(),
     }
+}
+fn session_start(source: &str) -> HookEvent {
+    HookEvent::SessionStart {
+        source: source.into(),
+    }
+}
+fn session_end(reason: SessionEndReason) -> HookEvent {
+    HookEvent::SessionEnd { reason }
 }
 fn input(session: &str, event: HookEvent) -> HookInput {
     HookInput {
@@ -90,7 +98,7 @@ fn idle_and_ended_sessions_hide_the_entire_segment() {
     activity.apply(stop("a"), 130);
     assert!(render(Some(&activity), 140).is_none());
     activity.apply(start("a", "Explore"), 150);
-    activity.apply(HookEvent::SessionEnd, 160);
+    activity.apply(session_end(SessionEndReason::Other), 160);
     activity.apply(start("late", "Explore"), 170);
     assert!(render(Some(&activity), 180).is_none());
     assert_eq!(activity.agents.len(), 1);
@@ -131,14 +139,29 @@ fn hook_schema_rejects_missing_fields_and_unknown_events() {
         json!({"session_id":"one", "hook_event_name":"Unknown"})
     )
     .is_err());
+    for reason in ["clear", "resume", "logout", "prompt_input_exit", "other"] {
+        assert!(serde_json::from_value::<HookInput>(json!({
+            "session_id": "one", "hook_event_name": "SessionEnd", "reason": reason
+        }))
+        .is_ok());
+    }
+    for invalid in [
+        json!({"session_id": "one", "hook_event_name": "SessionEnd"}),
+        json!({"session_id": "one", "hook_event_name": "SessionEnd", "reason": "unknown"}),
+    ] {
+        assert!(serde_json::from_value::<HookInput>(invalid).is_err());
+    }
 }
 
 #[test]
 fn store_serializes_concurrent_writers_and_isolates_sessions() {
     let dir = TestDir::new();
-    let store = ActivityStore::new(dir.0.clone());
+    let store = ActivityStore::new(dir.0.clone(), 1);
     assert!(store.read("one").unwrap().is_none());
     assert!(fs::read_dir(&dir.0).unwrap().next().is_none());
+    store
+        .record(input("one", session_start("startup")), 90)
+        .unwrap();
     std::thread::scope(|scope| {
         for id in 0..24 {
             let store = &store;
@@ -152,10 +175,13 @@ fn store_serializes_concurrent_writers_and_isolates_sessions() {
     assert_eq!(store.read("one").unwrap().unwrap().agents.len(), 24);
     assert!(store.read("two").unwrap().is_none());
     store
+        .record(input("../../two", session_start("clear")), 100)
+        .unwrap();
+    store
         .record(input("../../two", start("other", "Plan")), 101)
         .unwrap();
     assert_eq!(store.read("../../two").unwrap().unwrap().agents.len(), 1);
-    assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 4);
+    assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 2);
     std::thread::scope(|scope| {
         for id in 0..24 {
             let store = &store;
@@ -170,16 +196,211 @@ fn store_serializes_concurrent_writers_and_isolates_sessions() {
 }
 
 #[test]
+fn process_exit_removes_all_owned_sessions_and_preserves_other_processes() {
+    for reason in [
+        SessionEndReason::PromptInputExit,
+        SessionEndReason::Logout,
+        SessionEndReason::Other,
+    ] {
+        let dir = TestDir::new();
+        let store = ActivityStore::new(dir.0.clone(), 1);
+        let other = ActivityStore::new(dir.0.clone(), 2);
+        for current in [&store, &other] {
+            current
+                .record(input("one", session_start("startup")), 100)
+                .unwrap();
+            current
+                .record(input("one", start("a", "Explore")), 110)
+                .unwrap();
+        }
+        store
+            .record(input("one", session_end(SessionEndReason::Resume)), 120)
+            .unwrap();
+        assert!(store.read("one").unwrap().unwrap().ended);
+        store
+            .record(input("two", session_start("resume")), 130)
+            .unwrap();
+        store.record(input("two", start("b", "Plan")), 140).unwrap();
+        store
+            .record(input("two", session_end(reason)), 150)
+            .unwrap();
+
+        assert!(!dir.0.join("1.json").exists());
+        assert!(!dir.0.join("1.lock").exists());
+        assert!(store.read("one").unwrap().is_none());
+        assert!(store.read("two").unwrap().is_none());
+        assert_eq!(other.read("one").unwrap().unwrap().agents.len(), 1);
+        assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 2);
+
+        store
+            .record(input("two", start("late", "Explore")), 160)
+            .unwrap();
+        store.record(input("two", stop("b")), 160).unwrap();
+        store
+            .record(input("two", session_end(SessionEndReason::Other)), 160)
+            .unwrap();
+        assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 2);
+    }
+}
+
+#[test]
+fn clear_removes_only_the_current_session_and_allows_new_activity() {
+    let dir = TestDir::new();
+    let store = ActivityStore::new(dir.0.clone(), 1);
+    store
+        .record(input("old", session_start("startup")), 100)
+        .unwrap();
+    store
+        .record(input("old", start("old-agent", "Explore")), 110)
+        .unwrap();
+    store
+        .record(input("kept", session_start("resume")), 120)
+        .unwrap();
+    store
+        .record(input("kept", start("kept-agent", "Plan")), 130)
+        .unwrap();
+    store
+        .record(input("old", session_end(SessionEndReason::Clear)), 140)
+        .unwrap();
+    assert!(store.read("old").unwrap().is_none());
+    assert_eq!(store.read("kept").unwrap().unwrap().agents.len(), 1);
+    assert!(!fs::read_to_string(dir.0.join("1.json"))
+        .unwrap()
+        .contains("old-agent"));
+
+    store.record(input("old", stop("old-agent")), 150).unwrap();
+    store
+        .record(input("old", start("late", "Explore")), 150)
+        .unwrap();
+    assert!(store.read("old").unwrap().is_none());
+    store
+        .record(input("kept", session_end(SessionEndReason::Clear)), 150)
+        .unwrap();
+    assert!(!dir.0.join("1.json").exists());
+    assert!(dir.0.join("1.lock").exists());
+    store
+        .record(input("kept", session_end(SessionEndReason::Clear)), 155)
+        .unwrap();
+    assert!(!dir.0.join("1.json").exists());
+    store
+        .record(input("new", session_start("clear")), 160)
+        .unwrap();
+    store
+        .record(input("new", start("new-agent", "Explore")), 170)
+        .unwrap();
+    assert_eq!(store.read("new").unwrap().unwrap().agents.len(), 1);
+    store
+        .record(input("new", session_end(SessionEndReason::Other)), 180)
+        .unwrap();
+    assert!(fs::read_dir(&dir.0).unwrap().next().is_none());
+}
+
+#[test]
+fn completed_subagents_and_compaction_keep_records_until_exit() {
+    let dir = TestDir::new();
+    let store = ActivityStore::new(dir.0.clone(), 1);
+    store
+        .record(input("one", session_start("startup")), 100)
+        .unwrap();
+    store
+        .record(input("one", start("a", "Explore")), 110)
+        .unwrap();
+    store.record(input("one", stop("a")), 120).unwrap();
+    store
+        .record(input("one", session_start("compact")), 130)
+        .unwrap();
+    let activity = store.read("one").unwrap().unwrap();
+    assert_eq!(activity.agents["a"].responded_at, Some(120));
+    assert!(!activity.ended);
+    assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 2);
+    store
+        .record(input("one", start("a", "Explore")), 140)
+        .unwrap();
+    assert_eq!(
+        store.read("one").unwrap().unwrap().agents["a"].started_at,
+        140
+    );
+}
+
+#[test]
+fn concurrent_exit_events_updates_and_reads_do_not_recreate_files() {
+    let dir = TestDir::new();
+    let store = ActivityStore::new(dir.0.clone(), 1);
+    store
+        .record(input("one", session_start("startup")), 100)
+        .unwrap();
+    let barrier = std::sync::Barrier::new(32);
+    std::thread::scope(|scope| {
+        for index in 0..32 {
+            let store = &store;
+            let barrier = &barrier;
+            scope.spawn(move || {
+                barrier.wait();
+                match index % 4 {
+                    0 => store
+                        .record(input("one", session_end(SessionEndReason::Other)), 120)
+                        .unwrap(),
+                    1 => store
+                        .record(input("one", start(&index.to_string(), "Explore")), 120)
+                        .unwrap(),
+                    2 => store
+                        .record(input("one", stop(&index.to_string())), 120)
+                        .unwrap(),
+                    _ => {
+                        store.read("one").unwrap();
+                    }
+                }
+            });
+        }
+    });
+    assert!(store.read("one").unwrap().is_none());
+    assert!(fs::read_dir(&dir.0).unwrap().next().is_none());
+}
+
+#[test]
+fn exit_without_a_started_process_creates_no_files() {
+    let dir = TestDir::new();
+    let root = dir.0.join("agents");
+    let store = ActivityStore::new(root.clone(), 1);
+    store
+        .record(input("one", session_end(SessionEndReason::Other)), 100)
+        .unwrap();
+    assert!(!root.exists());
+}
+
+#[test]
 fn corrupt_activity_is_reported_and_not_replaced_by_empty_state() {
     let dir = TestDir::new();
-    let store = ActivityStore::new(dir.0.clone());
+    let store = ActivityStore::new(dir.0.clone(), 1);
+    store
+        .record(input("a", session_start("startup")), 90)
+        .unwrap();
     store
         .record(input("a", start("one", "Explore")), 100)
         .unwrap();
-    fs::write(dir.0.join("61.json"), "{").unwrap();
+    fs::write(dir.0.join("1.json"), "{").unwrap();
     assert!(store.read("a").is_err());
     assert!(store.record(input("a", stop("one")), 120).is_err());
-    assert_eq!(fs::read_to_string(dir.0.join("61.json")).unwrap(), "{");
+    assert_eq!(fs::read_to_string(dir.0.join("1.json")).unwrap(), "{");
+    store
+        .record(input("a", session_end(SessionEndReason::Other)), 130)
+        .unwrap();
+    assert!(fs::read_dir(&dir.0).unwrap().next().is_none());
+}
+
+#[test]
+fn exit_reports_removal_failures() {
+    let dir = TestDir::new();
+    let store = ActivityStore::new(dir.0.clone(), 1);
+    store
+        .record(input("one", session_start("startup")), 100)
+        .unwrap();
+    fs::remove_file(dir.0.join("1.json")).unwrap();
+    fs::create_dir(dir.0.join("1.json")).unwrap();
+    assert!(store
+        .record(input("one", session_end(SessionEndReason::Other)), 110)
+        .is_err());
+    assert_eq!(fs::metadata(dir.0.join("1.lock")).unwrap().len(), 0);
 }
 
 fn settings(path: &std::path::Path) -> Value {
@@ -226,7 +447,10 @@ fn uninstall_keeps_user_refresh_changes_and_reinstall_reuses_session_state() {
     let exe = dir.0.join("ccline");
     integration::configure_at(&data, &path, &exe, true, Backend::Hooks).unwrap();
     let first = settings(&data.join("agents-installation.json"));
-    let store = ActivityStore::new(data.join("agents"));
+    let store = ActivityStore::new(data.join("agents"), 1);
+    store
+        .record(input("session", session_start("startup")), 90)
+        .unwrap();
     store
         .record(input("session", start("agent", "Explore")), 100)
         .unwrap();
@@ -238,7 +462,7 @@ fn uninstall_keeps_user_refresh_changes_and_reinstall_reuses_session_state() {
     integration::configure_at(&data, &path, &exe, true, Backend::Hooks).unwrap();
     let second = settings(&data.join("agents-installation.json"));
     assert_eq!(first["command"], second["command"]);
-    let reopened = ActivityStore::new(data.join("agents"));
+    let reopened = ActivityStore::new(data.join("agents"), 1);
     let current = reopened.read("session").unwrap().unwrap();
     assert_eq!(current.agents.len(), 1);
     assert_eq!(current.agents["agent"].started_at, 100);

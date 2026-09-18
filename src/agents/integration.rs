@@ -272,7 +272,9 @@ pub fn read_activity(session: &str) -> Result<Option<Activity>> {
         Some(installed) if installed.mod_settings.is_some() => {
             experimental::read_snapshot(session).map(Some)
         }
-        Some(_) => ActivityStore::new(dir.join("agents")).read(session),
+        Some(_) => {
+            ActivityStore::new(dir.join("agents"), super::claude_process_id()?).read(session)
+        }
     }
 }
 

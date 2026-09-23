@@ -117,6 +117,19 @@ pub struct Effort {
     pub level: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct RateLimitWindow {
+    pub used_percentage: f64,
+    #[serde(default, with = "chrono::serde::ts_seconds_option")]
+    pub resets_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RateLimits {
+    pub five_hour: Option<RateLimitWindow>,
+    pub seven_day: Option<RateLimitWindow>,
+}
+
 #[derive(Deserialize)]
 pub struct InputData {
     pub session_id: String,
@@ -126,6 +139,7 @@ pub struct InputData {
     pub transcript_path: String,
     pub cost: Option<Cost>,
     pub output_style: Option<OutputStyle>,
+    pub rate_limits: Option<RateLimits>,
 }
 
 // OpenAI-style nested token details

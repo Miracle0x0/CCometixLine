@@ -165,18 +165,6 @@ pub fn usage_segment() -> SegmentConfig {
             background: None,
         },
         styles: TextStyleConfig::default(),
-        options: {
-            let mut opts = HashMap::new();
-            opts.insert(
-                "api_base_url".to_string(),
-                serde_json::Value::String("https://api.anthropic.com".to_string()),
-            );
-            opts.insert(
-                "cache_duration".to_string(),
-                serde_json::Value::Number(180.into()),
-            );
-            opts.insert("timeout".to_string(), serde_json::Value::Number(2.into()));
-            opts
-        },
+        options: HashMap::new(),
     }
 }

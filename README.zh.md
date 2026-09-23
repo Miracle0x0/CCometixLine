@@ -237,6 +237,10 @@ CCometixLine 支持通过 TOML 文件和交互式 TUI 进行完整配置：
 
 支持的段落：目录、Git、模型、Effort、Agents、上下文窗口、使用量、会话、成本、输出样式、更新
 
+### 使用量配置
+
+Usage 默认关闭。运行 `ccline --config`，选中 **Usage**，按 **Enter** 开启，再按 **S** 保存。数据直接取自 [Claude Code 状态栏输入](https://code.claude.com/docs/en/statusline#available-data)中的 `rate_limits`，要求 Claude Code 2.1.80 或更新版本。文字显示 5 小时用量百分比和重置倒计时，例如 `24% · 2h`；Nerd Font 和 Powerline 模式的圆环图标表示 7 天用量。缺失值和已过期的重置时间显示为 `?`，两个窗口均缺失时隐藏该段落。Usage 没有专属配置选项，不发起 API 请求，也不读取凭据或缓存。
+
 ### Effort 配置
 
 运行 `ccline --config`，在段落列表中选中 **Effort**，按 **Enter** 独立切换显示状态，不影响 Model。按 **Tab** 编辑图标、颜色、背景和文字样式，按 **Shift+上/下方向键** 调整顺序，按 **S** 保存到 `config.toml`。预览随编辑实时更新。**W** 将配置写入当前主题文件，用于通过 `--theme` 指定主题的情况。

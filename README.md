@@ -245,6 +245,10 @@ All segments are configurable with:
 
 Supported segments: Directory, Git, Model, Effort, Agents, Context Window, Usage, Session, Cost, Output Style, Update
 
+### Usage Configuration
+
+Usage is disabled by default. Run `ccline --config`, select **Usage**, press **Enter** to enable it, then **S** to save. It reads `rate_limits` directly from [Claude Code's statusline input](https://code.claude.com/docs/en/statusline#available-data), available since Claude Code 2.1.80. The text shows the five-hour percentage and reset countdown, such as `24% · 2h`; in Nerd Font and Powerline modes, the circle icon shows seven-day utilization. Unavailable values and expired reset times appear as `?`. If neither window is present, the segment is hidden. Usage has no segment-specific options and makes no API requests or credential/cache reads.
+
 ### Effort Configuration
 
 Run `ccline --config`, select **Effort** in the segment list, and press **Enter** to toggle it independently of Model. Use **Tab** to edit its icon, colors, background, and text style, **Shift+Up/Down** to reorder it, and **S** to save `config.toml`. The preview updates as you edit. **W** writes to the current theme file, which is used when launching with `--theme`.

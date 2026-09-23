@@ -781,7 +781,7 @@ fn disabling_mod_restores_owned_values_and_preserves_later_user_edits() {
 }
 
 #[test]
-fn mod_snapshot_uses_the_requested_session_and_invalid_snapshots_are_errors() {
+fn mod_snapshot_uses_the_requested_session_and_hides_unavailable_activity() {
     use super::experimental::parse_snapshot;
     let snapshot = json!({"sessions":{
         "one":{"agents":{"a":{"agent_type":"Explore","started_at":100,"responded_at":null}},"ended":false},
@@ -794,8 +794,15 @@ fn mod_snapshot_uses_the_requested_session_and_invalid_snapshots_are_errors() {
             .contains("Explore 10s")
     );
     assert!(render(Some(&parse_snapshot(&snapshot, "two").unwrap()), 110).is_none());
-    assert!(parse_snapshot(&snapshot, "missing").is_err());
-    for malformed in ["{", "{}", "null", r#"{"sessions":{"one":{"agents":{}}}}"#] {
-        assert!(parse_snapshot(malformed, "one").is_err());
+    assert!(parse_snapshot(&snapshot, "missing").is_none());
+    for malformed in [
+        "",
+        "{",
+        "{}",
+        "null",
+        r#"{"sessions":{"one":{"agents":{}}}}"#,
+    ] {
+        assert!(parse_snapshot(malformed, "one").is_none());
+        assert!(render(parse_snapshot(malformed, "one").as_ref(), 110).is_none());
     }
 }

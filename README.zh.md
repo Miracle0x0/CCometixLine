@@ -291,7 +291,7 @@ options = { max_agents = 3, experimental_mod = false }
 
 Mod 模式将内嵌插件部署到 `~/.claude/skills/ccline-agents-mod/`，启用该插件和宿主的 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` 实验开关，并且**仅移除 ccline 添加的四个生命周期命令 hooks**。其他 hooks 保留，Mod 通过 `next` 继续执行它们。关闭实验模式会恢复命令 hooks，并恢复由本工具修改且未被用户再次修改的宿主设置。部署的插件在没有显式启用设置时默认关闭。开启宿主实验开关也会允许其他已启用插件的 Function Hooks 运行。
 
-Mod 在进程内接收同样的生命周期事件，通过 `CCLINE_AGENTS_SNAPSHOT` 将活动快照传给状态栏子进程，省去每次事件启动 ccline 命令进程，以及活动文件的读写和锁操作。显示仍使用现有 Rust 渲染器、耗时计算、`max_agents`、列宽适配和刷新间隔。Mod 状态保存在内存中，不重建插件加载前或重新加载期间错过的事件。Mod 快照缺失或损坏时会明确报错，不会静默读取旧 hook 记录。该 API 处于 Early Access；源码依据和验证范围见[组件文档](mods/agents/README.md)。
+Mod 在进程内接收同样的生命周期事件，通过 `CCLINE_AGENTS_SNAPSHOT` 将活动快照传给状态栏子进程，省去每次事件启动 ccline 命令进程，以及活动文件的读写和锁操作。显示仍使用现有 Rust 渲染器、耗时计算、`max_agents`、列宽适配和刷新间隔。Mod 状态保存在内存中，不重建插件加载前或重新加载期间错过的事件。`CCLINE_AGENTS_SNAPSHOT` 缺失、无效或不含当前会话时，仅隐藏 Agents 段落，其他状态照常显示，程序正常退出；Mod 模式不读取旧 hook 记录。该 API 处于 Early Access；源码依据和验证范围见[组件文档](mods/agents/README.md)。
 
 ### 模型配置 (`models.toml`)
 

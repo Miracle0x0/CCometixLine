@@ -96,12 +96,13 @@ struct Snapshot {
     sessions: BTreeMap<String, Activity>,
 }
 
-pub fn parse_snapshot(snapshot: &str, session: &str) -> Result<Activity> {
-    let mut snapshot: Snapshot = serde_json::from_str(snapshot)?;
-    snapshot.sessions.remove(session).ok_or_else(|| format!("Agents Mod has no snapshot for session {session}; restart Claude Code or disable Experimental Mod and save").into())
+/// Missing or invalid Mod data hides Agents without interrupting the status line.
+pub fn parse_snapshot(snapshot: &str, session: &str) -> Option<Activity> {
+    let mut snapshot: Snapshot = serde_json::from_str(snapshot).ok()?;
+    snapshot.sessions.remove(session)
 }
 
-pub fn read_snapshot(session: &str) -> Result<Activity> {
-    let snapshot = std::env::var(SNAPSHOT_ENV).map_err(|error| format!("Agents Mod snapshot is unavailable ({error}); restart Claude Code or disable Experimental Mod and save"))?;
+pub fn read_snapshot(session: &str) -> Option<Activity> {
+    let snapshot = std::env::var(SNAPSHOT_ENV).ok()?;
     parse_snapshot(&snapshot, session)
 }

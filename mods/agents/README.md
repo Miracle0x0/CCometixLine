@@ -38,7 +38,7 @@ On **S**, an enabled Agents segment with `experimental_mod = true` runs `claude 
 
 Mod selection deploys `.claude-plugin/plugin.json` and `hooks/` to `~/.claude/skills/ccline-agents-mod/`, enables `ccline-agents-mod@skills-dir`, and sets `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` in Claude's user settings. It removes only the four commands recorded as ccline's own hooks. Every function hook calls `next(event)` so other integrations still run.
 
-Switching to hooks or disabling Agents restores the original plugin/experiment settings when the installed values have not been edited, retaining unrelated settings. Deployed files stay available for re-enabling, but the plugin has `defaultEnabled: false`. Restart Claude Code after switching. Re-save after changing the Claude executable or version; the backend is chosen at configuration time, not on each refresh. The selected source is recorded in `agents-installation.json`; a missing snapshot in Mod mode is an explicit error.
+Switching to hooks or disabling Agents restores the original plugin/experiment settings when the installed values have not been edited, retaining unrelated settings. Deployed files stay available for re-enabling, but the plugin has `defaultEnabled: false`. Restart Claude Code after switching. Re-save after changing the Claude executable or version; the backend is chosen at configuration time, not on each refresh. The selected source is recorded in `agents-installation.json`. If `CCLINE_AGENTS_SNAPSHOT` is missing, invalid, or lacks the current session, ccline hides only the Agents segment and renders the rest of the status line without failing. Mod mode does not read hook activity files.
 
 ## Development checks
 

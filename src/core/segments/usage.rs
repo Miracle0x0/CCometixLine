@@ -49,7 +49,7 @@ impl Segment for UsageSegment {
         }
 
         let mut metadata = HashMap::new();
-        let (primary, secondary) = match &rate_limits.five_hour {
+        let (five_hour_percentage, secondary) = match &rate_limits.five_hour {
             Some(window) => {
                 metadata.insert(
                     "five_hour_utilization".to_string(),
@@ -65,20 +65,23 @@ impl Segment for UsageSegment {
             }
             None => ("?%".to_string(), "· ?".to_string()),
         };
-        let dynamic_icon = match &rate_limits.seven_day {
+        let (dynamic_icon, seven_day_percentage) = match &rate_limits.seven_day {
             Some(window) => {
                 metadata.insert(
                     "seven_day_utilization".to_string(),
                     window.used_percentage.to_string(),
                 );
-                Self::get_circle_icon(window.used_percentage)
+                (
+                    Self::get_circle_icon(window.used_percentage),
+                    format!("{}%", window.used_percentage.round()),
+                )
             }
-            None => "?",
+            None => ("?", "?%".to_string()),
         };
         metadata.insert("dynamic_icon".to_string(), dynamic_icon.to_string());
 
         Some(SegmentData {
-            primary,
+            primary: format!("{seven_day_percentage} · {five_hour_percentage}"),
             secondary,
             metadata,
         })
@@ -120,7 +123,7 @@ mod tests {
             "seven_day": { "used_percentage": 63.0, "resets_at": (now + Duration::days(3)).timestamp() }
         }));
         let data = UsageSegment::new().collect(&input).unwrap();
-        assert_eq!(data.primary, "24%");
+        assert_eq!(data.primary, "63% · 24%");
         assert_eq!(data.secondary, "· 2h");
         assert_eq!(data.metadata["five_hour_utilization"], "23.5");
         assert_eq!(data.metadata["seven_day_utilization"], "63");
@@ -144,7 +147,7 @@ mod tests {
         let five_hour_only = segment
             .collect(&input(json!({"five_hour": {"used_percentage": 0.0}})))
             .unwrap();
-        assert_eq!(five_hour_only.primary, "0%");
+        assert_eq!(five_hour_only.primary, "?% · 0%");
         assert_eq!(five_hour_only.secondary, "· ?");
         assert_eq!(five_hour_only.metadata["dynamic_icon"], "?");
         assert!(!five_hour_only
@@ -154,7 +157,7 @@ mod tests {
         let seven_day_only = segment
             .collect(&input(json!({"seven_day": {"used_percentage": 80.0}})))
             .unwrap();
-        assert_eq!(seven_day_only.primary, "?%");
+        assert_eq!(seven_day_only.primary, "80% · ?%");
         assert_eq!(seven_day_only.secondary, "· ?");
         assert_eq!(seven_day_only.metadata["dynamic_icon"], "\u{f0aa4}");
         assert!(!seven_day_only
@@ -172,11 +175,12 @@ mod tests {
             (-5.0, "-5%"),
         ] {
             let data = UsageSegment::new()
-                .collect(&input(
-                    json!({"five_hour": {"used_percentage": percentage}}),
-                ))
+                .collect(&input(json!({
+                    "five_hour": {"used_percentage": percentage},
+                    "seven_day": {"used_percentage": percentage}
+                })))
                 .unwrap();
-            assert_eq!(data.primary, expected);
+            assert_eq!(data.primary, format!("{expected} · {expected}"));
         }
     }
 
@@ -242,7 +246,7 @@ mod tests {
             let config: Config = toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
             let renderer = StatusLineGenerator::new(config.clone());
             let rendered = renderer.generate(collect_all_segments(&config, &present).unwrap());
-            assert!(rendered.contains("24%"), "{rendered}");
+            assert!(rendered.contains("63% · 24%"), "{rendered}");
             assert!(rendered.contains("· ?"), "{rendered}");
             if mode != StyleMode::Plain {
                 assert!(rendered.contains('\u{f0aa3}'), "{rendered}");

@@ -189,9 +189,9 @@ impl PreviewComponent {
                     },
                 },
                 SegmentId::Usage => SegmentData {
-                    primary: "24%".to_string(),
+                    primary: "63% · 24%".to_string(),
                     secondary: "· 2h".to_string(),
-                    metadata: HashMap::new(),
+                    metadata: HashMap::from([("dynamic_icon".into(), "\u{f0aa3}".into())]),
                 },
                 SegmentId::Cost => SegmentData {
                     primary: "$0.02".to_string(),

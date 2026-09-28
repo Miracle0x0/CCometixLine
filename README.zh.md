@@ -239,7 +239,7 @@ CCometixLine 支持通过 TOML 文件和交互式 TUI 进行完整配置：
 
 ### 使用量配置
 
-Usage 默认关闭。运行 `ccline --config`，选中 **Usage**，按 **Enter** 开启，再按 **S** 保存。数据直接取自 [Claude Code 状态栏输入](https://code.claude.com/docs/en/statusline#available-data)中的 `rate_limits`，要求 Claude Code 2.1.80 或更新版本。文字显示 5 小时用量百分比和重置倒计时，例如 `24% · 2h`；Nerd Font 和 Powerline 模式的圆环图标表示 7 天用量。缺失值和已过期的重置时间显示为 `?`，两个窗口均缺失时隐藏该段落。Usage 没有专属配置选项，不发起 API 请求，也不读取凭据或缓存。
+Usage 默认关闭。运行 `ccline --config`，选中 **Usage**，按 **Enter** 开启，再按 **S** 保存。数据直接取自 [Claude Code 状态栏输入](https://code.claude.com/docs/en/statusline#available-data)中的 `rate_limits`，要求 Claude Code 2.1.80 或更新版本。文字依次显示周已用百分比、5 小时已用百分比和 5 小时重置倒计时，例如 `63% · 24% · 2h`；前面的饼图表示 7 天用量。缺失值和已过期的重置时间显示为 `?`，两个窗口均缺失时隐藏该段落。Usage 没有专属配置选项，不发起 API 请求，也不读取凭据或缓存。
 
 ### Effort 配置
 

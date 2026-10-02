@@ -289,7 +289,7 @@ options = { max_agents = 3, experimental_mod = false }
 
 **Experimental Mod 默认关闭。** 在 Agents 设置面板中选中 **Experimental Mod**，按 **Enter** 切换，再按 **S** 保存；配置文件对应 Agents 条目 `options` 中的 `experimental_mod = true`。保存时通过 PATH 中的 `claude --version` 检测版本：Claude Code **2.1.273 或更新版本**选择 Mod；版本较旧或找不到 CLI 时使用原有 hooks 后端，TUI 会显示原因。版本检测在保存时执行，更换 Claude Code 版本后需重新保存。切换后端后重启 Claude Code 生效。
 
-Mod 模式将内嵌插件部署到 `~/.claude/skills/ccline-agents-mod/`，启用该插件和宿主的 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` 实验开关，并且**仅移除 ccline 添加的四个生命周期命令 hooks**。其他 hooks 保留，Mod 通过 `next` 继续执行它们。关闭实验模式会恢复命令 hooks，并恢复由本工具修改且未被用户再次修改的宿主设置。部署的插件在没有显式启用设置时默认关闭。开启宿主实验开关也会允许其他已启用插件的 Function Hooks 运行。
+Mod 模式将内嵌插件部署到 `~/.claude/skills/ccline-agents-mod/`，启用该插件，并且**仅移除 ccline 添加的四个生命周期命令 hooks**。它同时会设置宿主的 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` 实验开关；该开关在 Early Access 阶段用于启用 Function Hooks，而 Claude Code 2.1.287 在不设置该变量时也能加载 Mod，因此它只对仍需要该开关的版本有意义。其他 hooks 保留，Mod 通过 `next` 继续执行它们。关闭实验模式会恢复命令 hooks，并恢复由本工具修改且未被用户再次修改的宿主设置。部署的插件在没有显式启用设置时默认关闭。在仍需该开关的版本上，开启宿主实验开关也会允许其他已启用插件的 Function Hooks 运行。
 
 Mod 在进程内接收同样的生命周期事件，通过 `CCLINE_AGENTS_SNAPSHOT` 将活动快照传给状态栏子进程，省去每次事件启动 ccline 命令进程，以及活动文件的读写和锁操作。显示仍使用现有 Rust 渲染器、耗时计算、`max_agents`、列宽适配和刷新间隔。Mod 状态保存在内存中，不重建插件加载前或重新加载期间错过的事件。`CCLINE_AGENTS_SNAPSHOT` 缺失、无效或不含当前会话时，仅隐藏 Agents 段落，其他状态照常显示，程序正常退出；Mod 模式不读取旧 hook 记录。该 API 处于 Early Access；源码依据和验证范围见[组件文档](mods/agents/README.md)。
 

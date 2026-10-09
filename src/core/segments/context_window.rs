@@ -20,6 +20,20 @@ impl ContextWindowSegment {
     }
 }
 
+/// Thousands use a `k` suffix with at most one decimal, such as `12.4k`.
+pub fn format_tokens(tokens: u64) -> String {
+    if tokens >= 1000 {
+        let k_value = tokens as f64 / 1000.0;
+        if k_value.fract() == 0.0 {
+            format!("{}k", tokens / 1000)
+        } else {
+            format!("{:.1}k", k_value)
+        }
+    } else {
+        tokens.to_string()
+    }
+}
+
 impl Segment for ContextWindowSegment {
     fn collect(&self, input: &InputData) -> Option<SegmentData> {
         // Dynamically determine context limit based on current model ID
@@ -37,16 +51,7 @@ impl Segment for ContextWindowSegment {
                     format!("{:.1}%", context_used_rate)
                 };
 
-                let tokens = if context_used_token >= 1000 {
-                    let k_value = context_used_token as f64 / 1000.0;
-                    if k_value.fract() == 0.0 {
-                        format!("{}k", k_value as u32)
-                    } else {
-                        format!("{:.1}k", k_value)
-                    }
-                } else {
-                    context_used_token.to_string()
-                };
+                let tokens = format_tokens(context_used_token.into());
 
                 (percentage, tokens)
             }

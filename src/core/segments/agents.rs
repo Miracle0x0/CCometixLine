@@ -71,11 +71,7 @@ impl AgentsSegment {
             active: active
                 .into_iter()
                 .map(|agent| ActiveAgent {
-                    name: agent
-                        .agent_type
-                        .chars()
-                        .filter(|c| !c.is_control())
-                        .collect(),
+                    name: agents::printable(&agent.agent_type),
                     elapsed: now.saturating_sub(agent.started_at),
                 })
                 .collect(),
@@ -105,13 +101,11 @@ impl AgentSummary {
             text.push_str(&format!(" · {} responded", self.responded));
         }
         for agent in self.active.iter().take(count) {
-            let elapsed = agent.elapsed;
-            let duration = if elapsed < 60 {
-                format!("{elapsed}s")
-            } else {
-                format!("{}m{:02}s", elapsed / 60, elapsed % 60)
-            };
-            text.push_str(&format!(" · {} {duration}", agent.name));
+            text.push_str(&format!(
+                " · {} {}",
+                agent.name,
+                agents::format_elapsed(agent.elapsed)
+            ));
         }
         let hidden = self.active.len() - count;
         // With no names, the active count already summarizes every agent.

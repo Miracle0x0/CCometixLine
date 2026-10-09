@@ -18,6 +18,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    if cli.subagent_statusline {
+        use ccometixline::agents::{self, panel};
+        let input: panel::PanelInput = serde_json::from_reader(io::stdin().lock())?;
+        let rows = panel::rows(
+            &input,
+            &Config::load()?,
+            agents::store::now()?,
+            &ccometixline::config::ModelConfig::load(),
+        );
+        for row in rows {
+            println!("{}", serde_json::to_string(&row)?);
+        }
+        return Ok(());
+    }
+
     if cli.config {
         ccometixline::ui::run_configurator()?;
         return Ok(());

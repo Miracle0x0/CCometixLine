@@ -2,6 +2,8 @@
 
 pub mod experimental;
 pub mod integration;
+pub mod panel;
+pub mod selection;
 pub mod store;
 
 #[cfg(test)]
@@ -51,6 +53,20 @@ pub enum SessionEndReason {
 impl SessionEndReason {
     pub fn exits_process(&self) -> bool {
         matches!(self, Self::Logout | Self::PromptInputExit | Self::Other)
+    }
+}
+
+/// Drop control characters so host-provided text cannot break a rendered row.
+pub fn printable(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).collect()
+}
+
+/// Elapsed seconds as `42s` or `1m05s`.
+pub fn format_elapsed(seconds: u64) -> String {
+    if seconds < 60 {
+        format!("{seconds}s")
+    } else {
+        format!("{}m{:02}s", seconds / 60, seconds % 60)
     }
 }
 

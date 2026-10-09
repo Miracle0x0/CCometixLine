@@ -285,8 +285,9 @@ impl SettingsComponent {
                     &segment.options,
                 ) {
                     Ok(enabled) => format!(
-                        "└─ Experimental Mod: {}",
-                        if enabled { "On" } else { "Off" }
+                        "└─ Experimental Mod: {} (Claude Code below {})",
+                        if enabled { "On" } else { "Off" },
+                        crate::agents::selection::PANEL_MIN_VERSION
                     ),
                     Err(error) => format!("└─ Experimental Mod: {error}"),
                 };

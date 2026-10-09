@@ -261,11 +261,18 @@ options = {}
 
 ### 子 agent 运行状态
 
-**所有内置主题默认关闭 Agents。** 运行 `ccline --config`，选中 **Agents**，按 **Enter** 开启，再按 **S** 保存。默认后端在保存时会在 `~/.claude/settings.json` 安装 `SessionStart`、`SubagentStart`、`SubagentStop` 和 `SessionEnd` 命令 hooks。启用后重启 Claude Code，由 `SessionStart` 初始化活动记录。没有配置状态栏时会同时配置 ccline；已有状态栏命令保持不变。未设置 `refreshInterval` 时会添加两秒刷新，使主会话空闲时也能更新后台活动。
+**所有内置主题默认关闭 Agents。** 运行 `ccline --config`，选中 **Agents**，按 **Enter** 开启，再按 **S** 保存。保存时通过 PATH 中的 `claude --version` 检测版本，决定 agent 的显示位置：
 
-关闭 **Agents** 并按 **S** 保存即可卸载对应 hooks，保留其他 hooks 和设置。本功能添加的刷新间隔若未被修改，会在卸载时移除；原有或后来手动修改的间隔保持不变。未保存的切换只影响预览。**W** 和 **Ctrl+S** 只保存主题文件，不改变 hooks 安装状态；**S** 才会应用活动开关。配置或主题没有 Agents 条目时，TUI 会将其作为默认关闭的选项显示。
+- Claude Code **2.1.293 或更新版本**：由 Claude Code 自带的、位于输入框下方的子代理面板列出 agent，ccline 负责渲染面板的每一行，详见[子代理面板](#子代理面板)。主状态栏保留其他段落，不显示 Agents 段落，也不安装生命周期 hooks。
+- 更旧的版本，或 PATH 中找不到 `claude`：主状态栏显示本节其余部分描述的 Agents 段落，数据来自生命周期命令 hooks 或[实验性 Agents Mod](#实验性-agents-mod)。
 
-观察到活跃子 agent 时，主状态栏显示例如 `Agents: 4 active · 1 responded · reviewer 1m20s · Explore 35s · Plan 12s · +1 more`。活跃 agent 按运行时长从长到短排列，`max_agents` 是显示名称数量的上限，默认 `3`。每次刷新会根据终端列宽，在保留其他段落、图标、分隔符和数量摘要的前提下，从末尾收起放不下的完整“名称 + 耗时”，并更新 `+N more`。没有名称能放下或 `max_agents = 0` 时只显示数量；没有活跃子 agent 时整个段落及其分隔符隐藏。若其余段落和数量摘要本身已经超宽，收起名称无法避免宿主裁剪。
+版本检测在保存时执行，更换 Claude Code 版本后需重新保存。版本输出无效或 `claude --version` 执行失败时会明确报错。保存后重启 Claude Code 生效。
+
+hooks 后端在保存时会在 `~/.claude/settings.json` 安装 `SessionStart`、`SubagentStart`、`SubagentStop` 和 `SessionEnd` 命令 hooks。启用后重启 Claude Code，由 `SessionStart` 初始化活动记录。没有配置状态栏时会同时配置 ccline；已有状态栏命令保持不变。未设置 `refreshInterval` 时会添加两秒刷新，使主会话空闲时也能更新后台活动。
+
+关闭 **Agents** 并按 **S** 保存即可卸载对应 hooks 或面板命令，保留其他 hooks 和设置。本功能添加的刷新间隔若未被修改，会在卸载时移除；原有或后来手动修改的间隔保持不变。未保存的切换只影响预览。**W** 和 **Ctrl+S** 只保存主题文件，不改变 hooks 安装状态；**S** 才会应用活动开关。配置或主题没有 Agents 条目时，TUI 会将其作为默认关闭的选项显示。
+
+低于 Claude Code 2.1.293 时，观察到活跃子 agent 后，主状态栏显示例如 `Agents: 4 active · 1 responded · reviewer 1m20s · Explore 35s · Plan 12s · +1 more`。活跃 agent 按运行时长从长到短排列，`max_agents` 是显示名称数量的上限，默认 `3`。每次刷新会根据终端列宽，在保留其他段落、图标、分隔符和数量摘要的前提下，从末尾收起放不下的完整“名称 + 耗时”，并更新 `+N more`。没有名称能放下或 `max_agents = 0` 时只显示数量；没有活跃子 agent 时整个段落及其分隔符隐藏。若其余段落和数量摘要本身已经超宽，收起名称无法避免宿主裁剪。
 
 在 TUI 中选中 **Agents**，按 **Tab** 进入设置，选中 **Max agents** 并按 **Enter** 输入非负整数；**Ctrl+U** 清空输入，**Enter** 应用，**Esc** 取消，**S** 保存到 `config.toml`。无效输入会显示错误并保留编辑框。颜色、图标、背景、文字样式和排序仍使用原有控件；预览使用示例活动，按预览区域的实际宽度收起名称。也可以直接编辑配置或主题中的 Agents 条目：
 
@@ -285,11 +292,25 @@ options = { max_agents = 3, experimental_mod = false }
 
 汇总依据[官方生命周期 hooks](https://code.claude.com/docs/en/hooks#subagentstart)。`responded` 表示收到 `SubagentStop`，不代表任务成功。这些事件无法可靠区分等待授权、失败、取消或其他 stop hook 要求继续运行的状态，因此使用可配置的活跃颜色，不推断这些细分状态。没有结束事件的异常中断无法从这份数据确认；强制终止或崩溃未触发 `SessionEnd` 时无法执行文件清理。安装前已在运行的 agent 不会通过扫描转录文件重建。状态或设置文件损坏时会明确报错。
 
+### 子代理面板
+
+在 Claude Code 2.1.293 或更新版本上，保存时会把 `~/.claude/settings.json` 中的 `subagentStatusLine` 设为命令 `ccline --subagent-statusline`。Claude Code 每次刷新面板时运行该命令，通过 stdin 传入当前可见的行，ccline 将每一行替换为类似下面的内容：
+
+```text
+Explore · 查找配置加载逻辑 · 1m20s · 12.4k (6%) · Sonnet 5.5 · high
+```
+
+各字段依次为：agent 类型（缺失时用 agent 名称）、任务进度标签、运行中显示已运行时长，否则显示任务状态（例如 `failed`）、子 agent 的 token 数及其占上下文窗口的比例、经 `models.toml` 解析的模型显示名，以及配置的推理 effort（数值预算显示为 `8k budget`）。输入中缺少的字段不显示。行内使用 Agents 段落的图标、图标颜色、文字颜色和粗体设置；不使用背景色和分隔符，也不添加任何标题文字。行宽超过 Claude Code 提供的 `columns` 时，ccline 依次去掉 effort、模型、token 数，最后用 `…` 截短标签。
+
+面板中有哪些行由 Claude Code 决定：子 agent 成功结束后其行立即消失，失败或被停止的行保留 30 秒，面板只列出有限的行数（[官方文档](https://code.claude.com/docs/en/sub-agents#run-subagents-in-foreground-or-background)）。因此该模式下没有 `responded` 计数，`max_agents` 和主状态栏的列宽适配也不适用。`agentType` 字段从 2.1.293 开始提供，因此以该版本为门槛。配置中 Agents 段落关闭或不存在时，命令不输出任何内容，Claude Code 保持默认行。面板输入格式错误时会明确报错。
+
+若 `subagentStatusLine` 已有并非 ccline 写入的值（包括用户后来修改过的 ccline 原值），ccline 会保留该值，改为安装 hooks 后端，并在 TUI 中提示。切换到 hooks 或关闭 Agents 时，仅在面板命令未被修改的情况下移除它。面板不需要状态栏定时刷新，因此该模式不添加 `refreshInterval`，并在未被修改时移除之前由 ccline 添加的刷新间隔。Claude Code 对 `subagentStatusLine` 适用与状态栏相同的工作区信任、`disableAllHooks` 和 `allowManagedHooksOnly` 规则（[官方文档](https://code.claude.com/docs/en/statusline#subagent-status-lines)）。安装清单会记录面板命令，用于卸载。
+
 ### 实验性 Agents Mod
 
-**Experimental Mod 默认关闭。** 在 Agents 设置面板中选中 **Experimental Mod**，按 **Enter** 切换，再按 **S** 保存；配置文件对应 Agents 条目 `options` 中的 `experimental_mod = true`。保存时通过 PATH 中的 `claude --version` 检测版本：Claude Code **2.1.273 或更新版本**选择 Mod；版本较旧或找不到 CLI 时使用原有 hooks 后端，TUI 会显示原因。版本检测在保存时执行，更换 Claude Code 版本后需重新保存。切换后端后重启 Claude Code 生效。
+**Experimental Mod 默认关闭。** 在 Agents 设置面板中选中 **Experimental Mod**，按 **Enter** 切换，再按 **S** 保存；配置文件对应 Agents 条目 `options` 中的 `experimental_mod = true`。保存时通过 PATH 中的 `claude --version` 检测版本：Claude Code **2.1.273 至 2.1.292** 选择 Mod；**2.1.293 或更新版本**改用[子代理面板](#子代理面板)，TUI 会提示 Mod 仅适用于 2.1.293 以下版本；版本较旧或找不到 CLI 时使用原有 hooks 后端，TUI 会显示原因。版本检测在保存时执行，更换 Claude Code 版本后需重新保存。切换后端后重启 Claude Code 生效。
 
-Mod 模式将内嵌插件部署到 `~/.claude/skills/ccline-agents-mod/`，启用该插件，并且**仅移除 ccline 添加的四个生命周期命令 hooks**。它同时会设置宿主的 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` 实验开关；该开关在 Early Access 阶段用于启用 Function Hooks，而 Claude Code 2.1.287 在不设置该变量时也能加载 Mod，因此它只对仍需要该开关的版本有意义。其他 hooks 保留，Mod 通过 `next` 继续执行它们。关闭实验模式会恢复命令 hooks，并恢复由本工具修改且未被用户再次修改的宿主设置。部署的插件在没有显式启用设置时默认关闭。在仍需该开关的版本上，开启宿主实验开关也会允许其他已启用插件的 Function Hooks 运行。
+Mod 模式将内嵌插件部署到 `~/.claude/skills/ccline-agents-mod/`，启用该插件，并且**仅移除 ccline 添加的四个生命周期命令 hooks**。它同时会设置宿主的 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` 实验开关；该开关在 Early Access 阶段用于启用 Function Hooks，而 Claude Code 2.1.287 在不设置该变量时也能加载 Mod，因此它只对仍需要该开关的版本有意义。其他 hooks 保留，Mod 通过 `next` 继续执行它们。关闭实验模式会恢复命令 hooks。关闭实验模式或改用子代理面板时，会恢复由本工具修改且未被用户再次修改的宿主设置。部署的插件在没有显式启用设置时默认关闭。在仍需该开关的版本上，开启宿主实验开关也会允许其他已启用插件的 Function Hooks 运行。
 
 Mod 在进程内接收同样的生命周期事件，通过 `CCLINE_AGENTS_SNAPSHOT` 将活动快照传给状态栏子进程，省去每次事件启动 ccline 命令进程，以及活动文件的读写和锁操作。显示仍使用现有 Rust 渲染器、耗时计算、`max_agents`、列宽适配和刷新间隔。Mod 状态保存在内存中，不重建插件加载前或重新加载期间错过的事件。`CCLINE_AGENTS_SNAPSHOT` 缺失、无效或不含当前会话时，仅隐藏 Agents 段落，其他状态照常显示，程序正常退出；Mod 模式不读取旧 hook 记录。该 API 处于 Early Access；源码依据和验证范围见[组件文档](mods/agents/README.md)。
 

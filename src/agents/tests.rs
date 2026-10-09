@@ -1,6 +1,6 @@
 use super::{
-    experimental::Backend,
     integration,
+    selection::{self, Backend},
     store::{Activity, ActivityStore},
     HookEvent, HookInput, SessionEndReason,
 };
@@ -403,16 +403,23 @@ fn exit_reports_removal_failures() {
     assert_eq!(fs::metadata(dir.0.join("1.lock")).unwrap().len(), 0);
 }
 
+/// An isolated ccline data directory, Claude settings file and executable path; dropping the
+/// returned directory removes them all.
+fn installation(executable: &str) -> (TestDir, PathBuf, PathBuf, PathBuf) {
+    let dir = TestDir::new();
+    let data = dir.0.join("ccline");
+    let path = dir.0.join("settings.json");
+    let exe = dir.0.join(executable);
+    (dir, data, path, exe)
+}
+
 fn settings(path: &std::path::Path) -> Value {
     serde_json::from_slice(&fs::read(path).unwrap()).unwrap()
 }
 
 #[test]
 fn installation_is_idempotent_and_uninstall_preserves_other_hooks_and_settings() {
-    let dir = TestDir::new();
-    let data = dir.0.join("ccline");
-    let path = dir.0.join("settings.json");
-    let exe = dir.0.join("a path with 'quotes'/$dollars/ccline");
+    let (_dir, data, path, exe) = installation("a path with 'quotes'/$dollars/ccline");
     let original = json!({"model":"opus", "statusLine":{"type":"command", "command":"custom-status", "padding":2},
         "hooks":{"SubagentStart":[{"matcher":"Explore", "hooks":[{"type":"command","command":"audit-start"}]}],
             "SessionStart":[{"matcher":"startup", "hooks":[]}],
@@ -441,10 +448,7 @@ fn installation_is_idempotent_and_uninstall_preserves_other_hooks_and_settings()
 
 #[test]
 fn uninstall_keeps_user_refresh_changes_and_reinstall_reuses_session_state() {
-    let dir = TestDir::new();
-    let data = dir.0.join("ccline");
-    let path = dir.0.join("settings.json");
-    let exe = dir.0.join("ccline");
+    let (_dir, data, path, exe) = installation("ccline");
     integration::configure_at(&data, &path, &exe, true, Backend::Hooks).unwrap();
     let first = settings(&data.join("agents-installation.json"));
     let store = ActivityStore::new(data.join("agents"), 1);
@@ -493,10 +497,7 @@ fn uninstall_keeps_user_refresh_changes_and_reinstall_reuses_session_state() {
 
 #[test]
 fn invalid_settings_fail_without_installation_or_file_changes_and_disabled_is_inert() {
-    let dir = TestDir::new();
-    let data = dir.0.join("ccline");
-    let path = dir.0.join("settings.json");
-    let exe = dir.0.join("ccline");
+    let (_dir, data, path, exe) = installation("ccline");
     integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
     assert!(!data.exists());
     assert!(!path.exists());
@@ -687,20 +688,51 @@ fn preview_lists_sample_agents_with_the_configured_limit_and_shows_option_errors
 }
 
 #[test]
-fn experimental_selection_requires_the_baseline_and_reports_hook_fallback() {
-    use super::experimental;
-    for version in [None, Some("2.1.272 (Claude Code)"), Some("2.1.273-beta.1")] {
-        let selection = experimental::select(version).unwrap();
+fn selection_prefers_the_panel_then_the_opt_in_mod_then_hooks() {
+    for experimental_mod in [false, true] {
+        let selection = selection::select(None, experimental_mod).unwrap();
         assert_eq!(selection.backend, Backend::Hooks);
-        assert!(selection.message.contains("Hooks only"));
+        assert!(selection.message.contains("claude was not found"));
+        for version in ["2.1.293 (Claude Code)", "2.1.295 (Claude Code)", "2.2.0"] {
+            let selection = selection::select(Some(version), experimental_mod).unwrap();
+            assert_eq!(selection.backend, Backend::Panel, "{version}");
+            assert!(selection.message.starts_with("Subagent panel"));
+            assert_eq!(
+                selection
+                    .message
+                    .contains("Experimental Mod applies below 2.1.293"),
+                experimental_mod
+            );
+        }
+        assert!(selection::select(Some("not a version"), experimental_mod).is_err());
     }
-    for version in ["2.1.273 (Claude Code)", "2.1.274 (Claude Code)"] {
+    for version in [
+        "2.1.272 (Claude Code)",
+        "2.1.273 (Claude Code)",
+        "2.1.293-beta.1",
+    ] {
+        let selection = selection::select(Some(version), false).unwrap();
+        assert_eq!(selection.backend, Backend::Hooks, "{version}");
+        assert!(selection
+            .message
+            .contains("subagent panel requires 2.1.293+"));
+    }
+    for version in [Some("2.1.272 (Claude Code)"), Some("2.1.273-beta.1")] {
+        let selection = selection::select(version, true).unwrap();
+        assert_eq!(selection.backend, Backend::Hooks);
+        assert!(selection.message.contains("Mod requires 2.1.273+"));
+    }
+    for version in [
+        "2.1.273 (Claude Code)",
+        "2.1.292 (Claude Code)",
+        "2.1.293-beta.1",
+    ] {
         assert_eq!(
-            experimental::select(Some(version)).unwrap().backend,
-            Backend::Mod
+            selection::select(Some(version), true).unwrap().backend,
+            Backend::Mod,
+            "{version}"
         );
     }
-    assert!(experimental::select(Some("not a version")).is_err());
     let options = |value| serde_json::from_value(value).unwrap();
     assert!(!AgentsSegment::experimental_mod(&options(json!({}))).unwrap());
     assert!(AgentsSegment::experimental_mod(&options(json!({"experimental_mod":true}))).unwrap());
@@ -710,10 +742,7 @@ fn experimental_selection_requires_the_baseline_and_reports_hook_fallback() {
 #[test]
 fn mod_installation_switches_backends_without_changing_other_integrations() {
     use super::experimental;
-    let dir = TestDir::new();
-    let data = dir.0.join("ccline");
-    let path = dir.0.join("settings.json");
-    let exe = dir.0.join("ccline");
+    let (dir, data, path, exe) = installation("ccline");
     let original = json!({
         "env":{"CUSTOM":"keep"}, "enabledPlugins":{"other@market":true},
         "statusLine":{"type":"command","command":"existing-status"},
@@ -745,7 +774,7 @@ fn mod_installation_switches_backends_without_changing_other_integrations() {
         &path,
         &exe,
         true,
-        experimental::select(Some("2.1.272")).unwrap().backend,
+        selection::select(Some("2.1.272"), true).unwrap().backend,
     )
     .unwrap();
     assert_eq!(settings(&path), hooks);
@@ -758,10 +787,7 @@ fn mod_installation_switches_backends_without_changing_other_integrations() {
 #[test]
 fn disabling_mod_restores_owned_values_and_preserves_later_user_edits() {
     use super::experimental;
-    let dir = TestDir::new();
-    let data = dir.0.join("ccline");
-    let path = dir.0.join("settings.json");
-    let exe = dir.0.join("ccline");
+    let (_dir, data, path, exe) = installation("ccline");
     let original = json!({"env":{experimental::ENABLE_ENV:"0"}, "enabledPlugins":{experimental::PLUGIN_KEY:false}, "statusLine":{"command":"custom","type":"command"}});
     fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
     integration::configure_at(&data, &path, &exe, true, Backend::Mod).unwrap();
@@ -804,5 +830,212 @@ fn mod_snapshot_uses_the_requested_session_and_hides_unavailable_activity() {
     ] {
         assert!(parse_snapshot(malformed, "one").is_none());
         assert!(render(parse_snapshot(malformed, "one").as_ref(), 110).is_none());
+    }
+}
+
+#[test]
+fn panel_replaces_lifecycle_hooks_and_restores_only_owned_settings() {
+    let (_dir, data, path, exe) = installation("a path with 'quotes'/ccline");
+    let original = json!({"model":"opus", "statusLine":{"type":"command","command":"custom-status"},
+        "hooks":{"SubagentStart":[{"hooks":[{"type":"command","command":"audit"}]}]}});
+    fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
+    let configure =
+        |enabled, backend| integration::configure_at(&data, &path, &exe, enabled, backend).unwrap();
+    assert_eq!(configure(true, Backend::Hooks), Backend::Hooks);
+    let hooks = settings(&path);
+    assert_eq!(configure(true, Backend::Panel), Backend::Panel);
+    let panel = settings(&path);
+    let manifest = settings(&data.join("agents-installation.json"));
+    assert_eq!(panel["hooks"], original["hooks"]);
+    assert!(panel["statusLine"].get("refreshInterval").is_none());
+    assert_eq!(panel["subagentStatusLine"]["type"], "command");
+    let command = panel["subagentStatusLine"]["command"].as_str().unwrap();
+    assert!(command.ends_with(" --subagent-statusline"));
+    assert!(command.contains("'\\''"));
+    assert_eq!(manifest["subagent_status_line"], command);
+    assert!(integration::read_activity_at(&data, "session")
+        .unwrap()
+        .is_none());
+    assert_eq!(configure(true, Backend::Panel), Backend::Panel);
+    assert_eq!(settings(&path), panel);
+    assert_eq!(settings(&data.join("agents-installation.json")), manifest);
+    assert_eq!(configure(true, Backend::Hooks), Backend::Hooks);
+    assert_eq!(settings(&path), hooks);
+    assert!(settings(&data.join("agents-installation.json"))
+        .get("subagent_status_line")
+        .is_none());
+    configure(true, Backend::Panel);
+    configure(false, Backend::Hooks);
+    assert_eq!(settings(&path), original);
+    assert!(!data.join("agents-installation.json").exists());
+}
+
+#[test]
+fn a_user_subagent_status_line_is_kept_and_selects_hooks() {
+    let (_dir, data, path, exe) = installation("ccline");
+    let mine = json!({"type":"command","command":"my-rows"});
+    fs::write(
+        &path,
+        serde_json::to_vec(&json!({ "subagentStatusLine": mine })).unwrap(),
+    )
+    .unwrap();
+    let configure =
+        |enabled, backend| integration::configure_at(&data, &path, &exe, enabled, backend).unwrap();
+    assert_eq!(configure(true, Backend::Panel), Backend::Hooks);
+    let installed = settings(&path);
+    assert_eq!(installed["subagentStatusLine"], mine);
+    assert_eq!(
+        installed["hooks"]["SubagentStart"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(installed["statusLine"]["refreshInterval"], 2);
+    configure(false, Backend::Hooks);
+    let uninstalled = settings(&path);
+    assert_eq!(uninstalled["subagentStatusLine"], mine);
+    assert!(uninstalled.get("hooks").is_none());
+    assert!(uninstalled["statusLine"].get("refreshInterval").is_none());
+
+    // A later edit to ccline's own value also makes it the user's.
+    fs::write(&path, "{}").unwrap();
+    assert_eq!(configure(true, Backend::Panel), Backend::Panel);
+    let mut edited = settings(&path);
+    edited["subagentStatusLine"]["command"] = json!("edited");
+    fs::write(&path, serde_json::to_vec(&edited).unwrap()).unwrap();
+    assert_eq!(configure(true, Backend::Panel), Backend::Hooks);
+    assert_eq!(settings(&path)["subagentStatusLine"]["command"], "edited");
+    configure(false, Backend::Hooks);
+    assert_eq!(settings(&path)["subagentStatusLine"]["command"], "edited");
+}
+
+#[test]
+fn switching_from_the_mod_to_the_panel_restores_mod_settings() {
+    use super::experimental;
+    let (_dir, data, path, exe) = installation("ccline");
+    let original =
+        json!({"env":{"CUSTOM":"keep"}, "statusLine":{"type":"command","command":"custom"}});
+    fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
+    integration::configure_at(&data, &path, &exe, true, Backend::Mod).unwrap();
+    assert_eq!(settings(&path)["env"][experimental::ENABLE_ENV], "1");
+    integration::configure_at(&data, &path, &exe, true, Backend::Panel).unwrap();
+    let panel = settings(&path);
+    assert_eq!(panel["env"], original["env"]);
+    assert!(panel.get("enabledPlugins").is_none());
+    assert!(panel.get("hooks").is_none());
+    assert!(settings(&data.join("agents-installation.json"))
+        .get("mod_settings")
+        .is_none());
+    integration::configure_at(&data, &path, &exe, false, Backend::Hooks).unwrap();
+    assert_eq!(settings(&path), original);
+}
+
+mod panel_rows {
+    use super::super::panel::{rows, PanelInput, PanelRow};
+    use crate::config::{Config, ModelConfig, SegmentId};
+    use crate::core::statusline::visible_width;
+    use crate::ui::themes::ThemePresets;
+    use serde_json::json;
+
+    fn config(theme: &str, enabled: bool) -> Config {
+        // Built-in presets only: the user's theme files must not affect tests.
+        let mut config = match theme {
+            "default" => ThemePresets::get_default(),
+            _ => ThemePresets::get_powerline_dark(),
+        };
+        for segment in &mut config.segments {
+            if segment.id == SegmentId::Agents {
+                segment.enabled = enabled;
+            }
+        }
+        config
+    }
+
+    fn task() -> serde_json::Value {
+        json!({"id":"t1","name":"scout","type":"local_agent","agentType":"Explore","status":"running",
+            "description":"Find config loading","label":"查找配置加载","startTime":100_000_u64,
+            "model":"custom-model","effort":"high","contextWindowSize":200_000,"tokenCount":12_400,
+            "tokenSamples":[12_400],"cwd":"/tmp"})
+    }
+
+    fn render(config: &Config, columns: usize, tasks: Vec<serde_json::Value>) -> Vec<PanelRow> {
+        let input: PanelInput =
+            serde_json::from_value(json!({"session_id":"s","transcript_path":"/t",
+            "cwd":"/tmp","columns":columns,"tasks":tasks}))
+            .unwrap();
+        rows(&input, config, 180, &ModelConfig::default())
+    }
+
+    #[test]
+    fn rows_show_every_field_in_the_agents_colors_without_backgrounds() {
+        for theme in ["default", "powerline-dark"] {
+            let rows = render(&config(theme, true), 500, vec![task()]);
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].id, "t1");
+            assert!(
+                rows[0]
+                    .content
+                    .contains("Explore · 查找配置加载 · 1m20s · 12.4k (6%) · custom-model · high"),
+                "{theme}: {:?}",
+                rows[0].content
+            );
+            assert!(!rows[0].content.contains("\x1b[48"), "{theme}");
+            assert!(!rows[0].content.contains('\n'));
+        }
+    }
+
+    #[test]
+    fn narrow_rows_drop_trailing_details_then_shorten_the_label() {
+        let config = config("default", true);
+        let full = render(&config, 500, vec![task()]).remove(0).content;
+        let width = visible_width(&full);
+        let expectations = [
+            (width - 1, "custom-model", "high"),
+            (width - 8, "12.4k (6%)", "custom-model"),
+        ];
+        for (columns, kept, dropped) in expectations {
+            let row = render(&config, columns, vec![task()]).remove(0).content;
+            assert!(visible_width(&row) <= columns);
+            assert!(row.contains(kept), "{columns}: {row:?}");
+            assert!(!row.contains(dropped), "{columns}: {row:?}");
+        }
+        let minimal = render(&config, 0, vec![task()]).remove(0).content;
+        let base = visible_width(&minimal) - 1; // without the ellipsis
+        let short = render(&config, base + 3, vec![task()]).remove(0).content;
+        assert!(short.contains("查…"), "{short:?}");
+        assert!(visible_width(&short) <= base + 3);
+        assert!(minimal.contains("Explore · … · 1m20s"), "{minimal:?}");
+    }
+
+    #[test]
+    fn optional_fields_status_and_control_characters() {
+        let config = config("default", true);
+        let mut failed = task();
+        failed["status"] = json!("failed");
+        failed["label"] = json!("a\nb\u{1b}c");
+        failed["effort"] = json!(8000);
+        for key in ["agentType", "model", "contextWindowSize"] {
+            failed.as_object_mut().unwrap().remove(key);
+        }
+        let row = render(&config, 500, vec![failed.clone()]).remove(0).content;
+        assert!(
+            row.contains("scout · abc · failed · 12.4k · 8k budget"),
+            "{row:?}"
+        );
+        failed.as_object_mut().unwrap().remove("name");
+        let row = render(&config, 500, vec![failed.clone()]).remove(0).content;
+        assert!(row.contains("local_agent · abc"), "{row:?}");
+        failed["effort"] = json!(true);
+        let input = json!({"columns":80,"tasks":[failed]});
+        assert!(serde_json::from_value::<PanelInput>(input).is_err());
+    }
+
+    #[test]
+    fn disabled_agents_keep_the_default_rows() {
+        assert!(render(&config("default", false), 500, vec![task()]).is_empty());
+        let mut config = config("default", true);
+        config.segments.retain(|s| s.id != SegmentId::Agents);
+        assert!(render(&config, 500, vec![task()]).is_empty());
     }
 }

@@ -13,7 +13,7 @@ pub fn available_width(columns: &str, offset: usize) -> Result<usize, Box<dyn st
 }
 
 /// Measure terminal cells, excluding CSI formatting and OSC hyperlinks.
-fn visible_width(text: &str) -> usize {
+pub(crate) fn visible_width(text: &str) -> usize {
     static ESCAPES: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let escapes = ESCAPES.get_or_init(|| {
         regex::Regex::new(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
@@ -238,7 +238,7 @@ impl StatusLineGenerator {
         }
     }
 
-    fn render_segment(&self, config: &SegmentConfig, data: &SegmentData) -> String {
+    pub(crate) fn render_segment(&self, config: &SegmentConfig, data: &SegmentData) -> String {
         let icon = if let Some(dynamic_icon) = data.metadata.get("dynamic_icon") {
             dynamic_icon.clone()
         } else {

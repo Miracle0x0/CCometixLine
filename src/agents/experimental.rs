@@ -1,67 +1,13 @@
-//! Opt-in Mod selection and its in-process snapshot transport.
+//! The opt-in Mod's installation and its in-process snapshot transport.
 
 use super::{store::Activity, Result};
-use semver::Version;
 use serde::Deserialize;
-use std::{collections::BTreeMap, io::ErrorKind, path::Path, process::Command};
+use std::{collections::BTreeMap, path::Path};
 
-pub const MIN_VERSION: &str = "2.1.273";
 pub const PLUGIN_NAME: &str = "ccline-agents-mod";
 pub const PLUGIN_KEY: &str = "ccline-agents-mod@skills-dir";
 pub const ENABLE_ENV: &str = "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS";
 pub const SNAPSHOT_ENV: &str = "CCLINE_AGENTS_SNAPSHOT";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Backend {
-    Hooks,
-    Mod,
-}
-
-pub struct Selection {
-    pub backend: Backend,
-    pub message: String,
-}
-
-pub fn select(version: Option<&str>) -> Result<Selection> {
-    let Some(output) = version else {
-        return Ok(Selection {
-            backend: Backend::Hooks,
-            message: "Hooks only: claude was not found".into(),
-        });
-    };
-    let version = Version::parse(
-        output
-            .split_whitespace()
-            .next()
-            .ok_or("Empty Claude Code version")?,
-    )?;
-    if version < Version::parse(MIN_VERSION)? {
-        return Ok(Selection {
-            backend: Backend::Hooks,
-            message: format!("Hooks only: Claude Code {version}; Mod requires {MIN_VERSION}+"),
-        });
-    }
-    Ok(Selection {
-        backend: Backend::Mod,
-        message: format!("Experimental Mod: Claude Code {version}. Restart Claude Code to apply."),
-    })
-}
-
-pub fn detect() -> Result<Selection> {
-    let output = match Command::new("claude").arg("--version").output() {
-        Ok(output) => output,
-        Err(error) if error.kind() == ErrorKind::NotFound => return select(None),
-        Err(error) => return Err(error.into()),
-    };
-    if !output.status.success() {
-        return Err(format!(
-            "claude --version failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
-    select(Some(std::str::from_utf8(&output.stdout)?))
-}
 
 /// Ship the complete plugin with the binary; users need no Node or package installer.
 pub fn install(claude_dir: &Path) -> Result<()> {

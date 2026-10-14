@@ -69,7 +69,7 @@ impl UpdateState {
                 state.last_check = Some(Utc::now());
                 let _ = state.save();
 
-                match registry::check_for_updates() {
+                match github::check_for_updates() {
                     Ok(Some(version)) => {
                         state.status = UpdateStatus::Ready {
                             version: version.clone(),
@@ -80,8 +80,10 @@ impl UpdateState {
                     Ok(None) => {
                         state.status = UpdateStatus::Idle;
                     }
-                    Err(_) => {
-                        state.status = UpdateStatus::Idle;
+                    Err(error) => {
+                        state.status = UpdateStatus::Failed {
+                            error: error.to_string(),
+                        };
                     }
                 }
 
@@ -151,18 +153,36 @@ impl UpdateState {
     }
 }
 
-/// npm registry version check
-mod registry {
-    /// Check @cometix/ccline latest version from npm registry
+/// GitHub Release version check
+mod github {
+    #[derive(serde::Deserialize)]
+    struct Release {
+        tag_name: String,
+    }
+
+    /// Check the latest release of this repository.
     pub fn check_for_updates() -> Result<Option<String>, Box<dyn std::error::Error>> {
-        let url = "https://registry.npmjs.org/@cometix/ccline/latest";
+        let url = "https://api.github.com/repos/Miracle0x0/CCometixLine/releases/latest";
 
-        let response = ureq::get(url).header("Accept", "application/json").call()?;
+        let response = ureq::get(url)
+            .header("Accept", "application/vnd.github+json")
+            .header(
+                "User-Agent",
+                concat!("CCometixLine/", env!("CARGO_PKG_VERSION")),
+            )
+            .call()?;
 
-        let data: serde_json::Value = response.into_body().read_json()?;
-        let latest = data["version"].as_str().ok_or("Missing version field")?;
+        let release: Release = response.into_body().read_json()?;
+        newer_version(&release.tag_name, env!("CARGO_PKG_VERSION"))
+    }
 
-        let current = env!("CARGO_PKG_VERSION");
+    fn newer_version(
+        tag: &str,
+        current: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        let latest = tag
+            .strip_prefix('v')
+            .ok_or("Release tag must start with v")?;
         let current_ver = semver::Version::parse(current)?;
         let latest_ver = semver::Version::parse(latest)?;
 
@@ -170,6 +190,42 @@ mod registry {
             Ok(Some(latest.to_string()))
         } else {
             Ok(None)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{newer_version, Release};
+
+        #[test]
+        fn reads_github_release_tag() {
+            let release: Release = serde_json::from_str(
+                r#"{"tag_name":"v1.2.0","name":"Release 1.2.0","draft":false}"#,
+            )
+            .unwrap();
+            assert_eq!(
+                newer_version(&release.tag_name, "1.1.3").unwrap(),
+                Some("1.2.0".to_string())
+            );
+        }
+
+        #[test]
+        fn compares_versions_semantically() {
+            assert_eq!(
+                newer_version("v1.1.10", "1.1.9").unwrap(),
+                Some("1.1.10".to_string())
+            );
+            for tag in ["v1.1.3", "v1.1.2", "v1.1.3-rc.1"] {
+                assert_eq!(newer_version(tag, "1.1.3").unwrap(), None);
+            }
+        }
+
+        #[test]
+        fn rejects_invalid_release_data() {
+            assert!(serde_json::from_str::<Release>(r#"{"version":"1.2.0"}"#).is_err());
+            for tag in ["1.2.0", "vnot-a-version", ""] {
+                assert!(newer_version(tag, "1.1.3").is_err());
+            }
         }
     }
 }

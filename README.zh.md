@@ -38,36 +38,48 @@
 
 ## 安装
 
-### 快速安装（推荐）
+### GitHub Release（推荐）
 
-通过 npm 安装（适用于所有平台）：
+从 [GitHub Releases](https://github.com/Miracle0x0/CCometixLine/releases/latest) 下载对应平台的压缩包：
+
+| 平台 | 压缩包 |
+| --- | --- |
+| Linux x64 (glibc) | `ccline-linux-x64.tar.gz` |
+| Linux x64 (musl/static) | `ccline-linux-x64-static.tar.gz` |
+| Linux ARM64 (glibc) | `ccline-linux-arm64.tar.gz` |
+| Linux ARM64 (musl/static) | `ccline-linux-arm64-static.tar.gz` |
+| macOS Intel | `ccline-macos-x64.tar.gz` |
+| macOS Apple Silicon | `ccline-macos-arm64.tar.gz` |
+| Windows x64 | `ccline-windows-x64.zip` |
+
+#### Linux / macOS
+
+将 `archive` 设为表格中的对应文件名，然后下载并解压：
 
 ```bash
-# 全局安装
-npm install -g @cometix/ccline
-
-# 或使用 yarn
-yarn global add @cometix/ccline
-
-# 或使用 pnpm
-pnpm add -g @cometix/ccline
+archive=ccline-linux-x64.tar.gz
+mkdir -p ~/.claude/ccline
+curl -fL "https://github.com/Miracle0x0/CCometixLine/releases/latest/download/$archive" -o "$archive"
+tar -xzf "$archive" -C ~/.claude/ccline
+chmod +x ~/.claude/ccline/ccline
+export PATH="$HOME/.claude/ccline:$PATH"
 ```
 
-使用镜像源加速下载：
-```bash
-npm install -g @cometix/ccline --registry https://registry.npmmirror.com
+#### Windows
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
+Invoke-WebRequest -Uri "https://github.com/Miracle0x0/CCometixLine/releases/latest/download/ccline-windows-x64.zip" -OutFile "ccline-windows-x64.zip"
+Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath "$env:USERPROFILE\.claude\ccline" -Force
+$env:PATH = "$env:USERPROFILE\.claude\ccline;$env:PATH"
 ```
 
-安装后：
-- ✅ 全局命令 `ccline` 可在任何地方使用
-- ⚙️ 按照下方提示进行配置以集成到 Claude Code
-- 🎨 运行 `ccline -c` 打开配置面板进行主题选择
+以上命令会让 `ccline` 在当前终端中可用。若要在后续终端中使用，请将 `~/.claude/ccline`（Windows：`%USERPROFILE%\.claude\ccline`）加入用户 `PATH`。
 
 ### Claude Code 配置
 
 添加到 Claude Code `settings.json`：
 
-**跨平台通用（推荐）**
 ```json
 {
   "statusLine": {
@@ -78,94 +90,35 @@ npm install -g @cometix/ccline --registry https://registry.npmmirror.com
 }
 ```
 
-> **Windows 用户注意：** 从 Claude Code v2.1.47+ 开始，Windows 上支持 Unix 风格路径解析。`~` 符号会自动展开为您的用户主目录。**请勿使用 `%USERPROFILE%`** — 它在 v2.1.47+ 版本中不再可靠。
-> - 推荐：`~/.claude/ccline/ccline`（跨平台通用）
-> - 备选：`"ccline"`（需要 npm 全局安装）
-
-**后备方案 (npm 安装):**
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "ccline",
-    "padding": 0
-  }
-}
-```
-*如果 npm 全局安装已在 PATH 中可用，则使用此配置*
+运行 `ccline -c` 打开配置面板并选择主题。
 
 ### 更新
 
-```bash
-npm update -g @cometix/ccline
-```
-
-<details>
-<summary>手动安装（点击展开）</summary>
-
-或者从 [Releases](https://github.com/Haleclipse/CCometixLine/releases) 手动下载：
-
-#### Linux
-
-#### 选项 1: 动态链接版本（推荐）
-```bash
-mkdir -p ~/.claude/ccline
-wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-linux-x64.tar.gz
-tar -xzf ccline-linux-x64.tar.gz
-cp ccline ~/.claude/ccline/
-chmod +x ~/.claude/ccline/ccline
-```
-*系统要求: Ubuntu 22.04+, CentOS 9+, Debian 11+, RHEL 9+ (glibc 2.35+)*
-
-#### 选项 2: 静态链接版本（通用兼容）
-```bash
-mkdir -p ~/.claude/ccline
-wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-linux-x64-static.tar.gz
-tar -xzf ccline-linux-x64-static.tar.gz
-cp ccline ~/.claude/ccline/
-chmod +x ~/.claude/ccline/ccline
-```
-*适用于任何 Linux 发行版（静态链接，无依赖）*
-
-#### macOS (Intel)
-
-```bash  
-mkdir -p ~/.claude/ccline
-wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-macos-x64.tar.gz
-tar -xzf ccline-macos-x64.tar.gz
-cp ccline ~/.claude/ccline/
-chmod +x ~/.claude/ccline/ccline
-```
-
-#### macOS (Apple Silicon)
-
-```bash
-mkdir -p ~/.claude/ccline  
-wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-macos-arm64.tar.gz
-tar -xzf ccline-macos-arm64.tar.gz
-cp ccline ~/.claude/ccline/
-chmod +x ~/.claude/ccline/ccline
-```
-
-#### Windows
-
-```powershell
-# 创建目录并下载
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
-Invoke-WebRequest -Uri "https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-windows-x64.zip" -OutFile "ccline-windows-x64.zip"
-Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath "."
-Move-Item "ccline.exe" "$env:USERPROFILE\.claude\ccline\"
-```
-
-</details>
+再次执行对应平台的下载和解压命令，即可用最新 GitHub Release 替换已安装的程序。状态栏的 Update 段落会查询本仓库的 Release，提示可用的新版本。
 
 ### 从源码构建
 
 ```bash
-git clone https://github.com/Haleclipse/CCometixLine.git
+git clone https://github.com/Miracle0x0/CCometixLine.git
 cd CCometixLine
 cargo build --release
+```
+
+Linux / macOS:
+
+```bash
+mkdir -p ~/.claude/ccline
 cp target/release/ccometixline ~/.claude/ccline/ccline
+chmod +x ~/.claude/ccline/ccline
+export PATH="$HOME/.claude/ccline:$PATH"
+```
+
+Windows (PowerShell):
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
+Copy-Item target\release\ccometixline.exe "$env:USERPROFILE\.claude\ccline\ccline.exe" -Force
+$env:PATH = "$env:USERPROFILE\.claude\ccline;$env:PATH"
 ```
 
 ## 使用
@@ -364,6 +317,10 @@ cargo test
 # 构建优化版本
 cargo build --release
 ```
+
+### 发布
+
+修改 `Cargo.toml` 中的 `[package].version`，运行 `cargo check` 同步 `Cargo.lock`，然后提交这两个文件并推送到 `main` 或 `master`。发布工作流比较推送前后的包版本号；版本变化时构建七个平台的压缩包，并在本次推送的提交上创建 `v<版本号>` 标签及 GitHub Release。仅修改依赖不会发布版本，无需手动推送标签。
 
 ## 路线图
 

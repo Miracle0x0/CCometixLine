@@ -38,36 +38,48 @@ The statusline shows: Model | Directory | Git Branch Status | Context Window Inf
 
 ## Installation
 
-### Quick Install (Recommended)
+### GitHub Release (Recommended)
 
-Install via npm (works on all platforms):
+Download the archive for your platform from [GitHub Releases](https://github.com/Miracle0x0/CCometixLine/releases/latest):
+
+| Platform | Archive |
+| --- | --- |
+| Linux x64 (glibc) | `ccline-linux-x64.tar.gz` |
+| Linux x64 (musl/static) | `ccline-linux-x64-static.tar.gz` |
+| Linux ARM64 (glibc) | `ccline-linux-arm64.tar.gz` |
+| Linux ARM64 (musl/static) | `ccline-linux-arm64-static.tar.gz` |
+| macOS Intel | `ccline-macos-x64.tar.gz` |
+| macOS Apple Silicon | `ccline-macos-arm64.tar.gz` |
+| Windows x64 | `ccline-windows-x64.zip` |
+
+#### Linux / macOS
+
+Set `archive` to the filename from the table, then download and extract it:
 
 ```bash
-# Install globally
-npm install -g @cometix/ccline
-
-# Or using yarn
-yarn global add @cometix/ccline
-
-# Or using pnpm
-pnpm add -g @cometix/ccline
+archive=ccline-linux-x64.tar.gz
+mkdir -p ~/.claude/ccline
+curl -fL "https://github.com/Miracle0x0/CCometixLine/releases/latest/download/$archive" -o "$archive"
+tar -xzf "$archive" -C ~/.claude/ccline
+chmod +x ~/.claude/ccline/ccline
+export PATH="$HOME/.claude/ccline:$PATH"
 ```
 
-Use npm mirror for faster download:
-```bash
-npm install -g @cometix/ccline --registry https://registry.npmmirror.com
+#### Windows
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
+Invoke-WebRequest -Uri "https://github.com/Miracle0x0/CCometixLine/releases/latest/download/ccline-windows-x64.zip" -OutFile "ccline-windows-x64.zip"
+Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath "$env:USERPROFILE\.claude\ccline" -Force
+$env:PATH = "$env:USERPROFILE\.claude\ccline;$env:PATH"
 ```
 
-After installation:
-- ✅ Global command `ccline` is available everywhere
-- ⚙️ Follow the configuration steps below to integrate with Claude Code
-- 🎨 Run `ccline -c` to open configuration panel for theme selection
+These commands make `ccline` available in the current terminal. For future terminals, add `~/.claude/ccline` (Windows: `%USERPROFILE%\.claude\ccline`) to your user `PATH`.
 
 ### Claude Code Configuration
 
 Add to your Claude Code `settings.json`:
 
-**Cross-Platform (Recommended)**
 ```json
 {
   "statusLine": {
@@ -78,102 +90,35 @@ Add to your Claude Code `settings.json`:
 }
 ```
 
-> **Note for Windows users:** Starting from Claude Code v2.1.47+, Unix-style path parsing is supported on Windows. The `~` symbol is automatically expanded to your user home directory. **Do not use `%USERPROFILE%`** - it no longer works reliably in v2.1.47+.
-> - Recommended: `~/.claude/ccline/ccline` (works on all platforms)
-> - Alternative: `"ccline"` (requires npm global installation)
-
-**Fallback (npm installation):**
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "ccline",
-    "padding": 0
-  }
-}
-```
-*Use this if npm global installation is available in PATH*
+Run `ccline -c` to open the configuration panel and select a theme.
 
 ### Update
 
-```bash
-npm update -g @cometix/ccline
-```
-
-<details>
-<summary>Manual Installation (Click to expand)</summary>
-
-Alternatively, download from [Releases](https://github.com/Haleclipse/CCometixLine/releases):
-
-#### Linux
-
-#### Option 1: Dynamic Binary (Recommended)
-```bash
-mkdir -p ~/.claude/ccline
-wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-linux-x64.tar.gz
-tar -xzf ccline-linux-x64.tar.gz
-cp ccline ~/.claude/ccline/
-chmod +x ~/.claude/ccline/ccline
-```
-*Requires: Ubuntu 22.04+, CentOS 9+, Debian 11+, RHEL 9+ (glibc 2.35+)*
-
-#### Option 2: Static Binary (Universal Compatibility)
-```bash
-mkdir -p ~/.claude/ccline
-wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-linux-x64-static.tar.gz
-tar -xzf ccline-linux-x64-static.tar.gz
-cp ccline ~/.claude/ccline/
-chmod +x ~/.claude/ccline/ccline
-```
-*Works on any Linux distribution (static, no dependencies)*
-
-#### macOS (Intel)
-
-```bash  
-mkdir -p ~/.claude/ccline
-wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-macos-x64.tar.gz
-tar -xzf ccline-macos-x64.tar.gz
-cp ccline ~/.claude/ccline/
-chmod +x ~/.claude/ccline/ccline
-```
-
-#### macOS (Apple Silicon)
-
-```bash
-mkdir -p ~/.claude/ccline  
-wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-macos-arm64.tar.gz
-tar -xzf ccline-macos-arm64.tar.gz
-cp ccline ~/.claude/ccline/
-chmod +x ~/.claude/ccline/ccline
-```
-
-#### Windows
-
-```powershell
-# Create directory and download
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
-Invoke-WebRequest -Uri "https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-windows-x64.zip" -OutFile "ccline-windows-x64.zip"
-Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath "."
-Move-Item "ccline.exe" "$env:USERPROFILE\.claude\ccline\"
-```
-
-</details>
+Run the download and extraction commands for your platform again to replace the installed binary with the latest GitHub Release. The statusline's Update segment checks this repository's releases for newer versions.
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/Haleclipse/CCometixLine.git
+git clone https://github.com/Miracle0x0/CCometixLine.git
 cd CCometixLine
 cargo build --release
+```
 
-# Linux/macOS
+Linux / macOS:
+
+```bash
 mkdir -p ~/.claude/ccline
 cp target/release/ccometixline ~/.claude/ccline/ccline
 chmod +x ~/.claude/ccline/ccline
+export PATH="$HOME/.claude/ccline:$PATH"
+```
 
-# Windows (PowerShell)
+Windows (PowerShell):
+
+```powershell
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
-copy target\release\ccometixline.exe "$env:USERPROFILE\.claude\ccline\ccline.exe"
+Copy-Item target\release\ccometixline.exe "$env:USERPROFILE\.claude\ccline\ccline.exe" -Force
+$env:PATH = "$env:USERPROFILE\.claude\ccline;$env:PATH"
 ```
 
 ## Usage
@@ -371,6 +316,10 @@ cargo test
 # Build optimized release
 cargo build --release
 ```
+
+### Releases
+
+Change `[package].version` in `Cargo.toml` and run `cargo check` to update `Cargo.lock`, then commit both files and push to `main` or `master`. The release workflow compares package versions before and after the push. A version change builds all seven platform archives and creates `v<version>` and its GitHub Release at the pushed commit. Dependency-only changes do not publish a release; no manual tag push is needed.
 
 ## Roadmap
 

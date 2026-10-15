@@ -54,7 +54,7 @@
 archive=ccline-linux-x64.tar.gz
 mkdir -p ~/.claude/ccline
 curl -fL "https://github.com/Miracle0x0/CCometixLine/releases/latest/download/$archive" -o "$archive"
-tar -xzf "$archive" -C ~/.claude/ccline
+tar -xzf "$archive" --strip-components=1 -C ~/.claude/ccline
 chmod +x ~/.claude/ccline/ccline
 export PATH="$HOME/.claude/ccline:$PATH"
 ```
@@ -64,7 +64,8 @@ export PATH="$HOME/.claude/ccline:$PATH"
 ```powershell
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
 Invoke-WebRequest -Uri "https://github.com/Miracle0x0/CCometixLine/releases/latest/download/ccline-windows-x64.zip" -OutFile "ccline-windows-x64.zip"
-Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath "$env:USERPROFILE\.claude\ccline" -Force
+Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath . -Force
+Copy-Item -Path ".\ccline-windows-x64\ccline.exe" -Destination "$env:USERPROFILE\.claude\ccline\ccline.exe" -Force
 $env:PATH = "$env:USERPROFILE\.claude\ccline;$env:PATH"
 ```
 

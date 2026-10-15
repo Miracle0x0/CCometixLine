@@ -118,18 +118,22 @@ jobs:
     - name: Package Linux/macOS
       if: matrix.os != 'windows-latest' && matrix.target != 'x86_64-pc-windows-gnu'
       run: |
-        mkdir -p dist
-        cp target/${{ matrix.target }}/release/ccometixline dist/ccline
+        archive="${{ matrix.name }}"
+        package_dir="${archive%.tar.gz}"
+        mkdir -p "dist/$package_dir"
+        cp target/${{ matrix.target }}/release/ccometixline "dist/$package_dir/ccline"
         cd dist
-        tar czf ../${{ matrix.name }} ccline
+        tar czf "../$archive" "$package_dir"
 
     - name: Package Windows
       if: matrix.target == 'x86_64-pc-windows-gnu'
       run: |
-        mkdir -p dist
-        cp target/${{ matrix.target }}/release/ccometixline.exe dist/ccline.exe
+        archive="${{ matrix.name }}"
+        package_dir="${archive%.zip}"
+        mkdir -p "dist/$package_dir"
+        cp target/${{ matrix.target }}/release/ccometixline.exe "dist/$package_dir/ccline.exe"
         cd dist
-        zip ../${{ matrix.name }} ccline.exe
+        zip -r "../$archive" "$package_dir"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4

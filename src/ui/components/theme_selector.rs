@@ -14,11 +14,22 @@ impl ThemeSelectorComponent {
     }
 
     pub fn render(&self, f: &mut Frame, area: Rect, config: &Config) {
-        let is_modified = config.is_modified_from_theme();
-        let modified_indicator = if is_modified { "*" } else { "" };
+        let modified_indicator = match config.is_modified_from_theme() {
+            Ok(true) => "*",
+            Ok(false) => "",
+            Err(_) => " (theme file error)",
+        };
 
         // Get all available themes dynamically
-        let available_themes = crate::ui::themes::ThemePresets::list_available_themes();
+        let available_themes = match crate::ui::themes::ThemePresets::list_available_themes() {
+            Ok(themes) => themes,
+            Err(error) => {
+                let selector = Paragraph::new(format!("Cannot list themes: {error}"))
+                    .block(Block::default().borders(Borders::ALL).title("Themes"));
+                f.render_widget(selector, area);
+                return;
+            }
+        };
 
         // Calculate available width (minus borders and spacing)
         let content_width = area.width.saturating_sub(2); // Remove borders

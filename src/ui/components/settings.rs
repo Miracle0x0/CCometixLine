@@ -210,7 +210,7 @@ impl SettingsComponent {
                 spans.extend(content);
                 Line::from(spans)
             };
-            let mut lines = vec![
+            let lines = vec![
                 Line::from(format!("{} Segment", segment_name)),
                 create_field_line(
                     FieldSelection::Enabled,
@@ -270,32 +270,12 @@ impl SettingsComponent {
                 ),
                 create_field_line(
                     FieldSelection::Options,
-                    vec![Span::raw(if segment.id == SegmentId::Agents {
-                        match crate::core::segments::AgentsSegment::max_agents(&segment.options) {
-                            Ok(value) => format!("├─ Max agents: {value} (0: counts only)"),
-                            Err(error) => format!("├─ Max agents: {error}"),
-                        }
-                    } else {
-                        format!("└─ Options: {} items", segment.options.len())
-                    })],
+                    vec![Span::raw(format!(
+                        "└─ Options: {} items",
+                        segment.options.len()
+                    ))],
                 ),
             ];
-            if segment.id == SegmentId::Agents {
-                let label = match crate::core::segments::AgentsSegment::experimental_mod(
-                    &segment.options,
-                ) {
-                    Ok(enabled) => format!(
-                        "└─ Experimental Mod: {} (Claude Code below {})",
-                        if enabled { "On" } else { "Off" },
-                        crate::agents::selection::PANEL_MIN_VERSION
-                    ),
-                    Err(error) => format!("└─ Experimental Mod: {error}"),
-                };
-                lines.push(create_field_line(
-                    FieldSelection::ExperimentalMod,
-                    vec![Span::raw(label)],
-                ));
-            }
             let text = Text::from(lines);
             let settings_block = Block::default()
                 .borders(Borders::ALL)
@@ -313,7 +293,6 @@ impl SettingsComponent {
                 FieldSelection::BackgroundColor => 5,
                 FieldSelection::TextStyle => 6,
                 FieldSelection::Options => 7,
-                FieldSelection::ExperimentalMod => 8,
             };
             let scroll = if *selected_panel == Panel::Settings {
                 selected_line.saturating_sub(area.height.saturating_sub(3))

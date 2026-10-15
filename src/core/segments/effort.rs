@@ -30,20 +30,16 @@ impl Segment for EffortSegment {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Config, StyleMode};
+    use crate::config::{Config, ModelConfig, StyleMode};
     use crate::core::{collect_all_segments, StatusLineGenerator};
     use crate::ui::themes::ThemePresets;
     use serde_json::{json, Value};
 
     fn payload() -> Value {
-        json!({
-            "session_id": "effort-test",
-            "model": { "id": "claude-opus-4-6", "display_name": "Opus 4.6" },
-            "workspace": { "current_dir": "/work/project" },
-            "transcript_path": "/nonexistent/session.jsonl",
-            "output_style": { "name": "default" },
-            "thinking": { "enabled": false }
-        })
+        let mut payload = crate::core::segments::test_payload();
+        payload["output_style"] = json!({ "name": "default" });
+        payload["thinking"] = json!({ "enabled": false });
+        payload
     }
 
     fn effort_config() -> Config {
@@ -60,17 +56,15 @@ mod tests {
             let mut value = payload();
             value["effort"] = json!({ "level": level });
             let input: InputData = serde_json::from_value(value).unwrap();
-            let data = collect_all_segments(&config, &input).unwrap();
+            let data = collect_all_segments(&config, &ModelConfig::default(), &input).unwrap();
             assert_eq!(data.len(), 1);
-            let crate::core::segments::SegmentContent::Text(ref text) = data[0].1 else {
-                panic!("expected effort text")
-            };
-            assert_eq!(text.primary, level);
+            assert_eq!(data[0].1.primary, level);
             assert!(renderer.generate(data).contains(level));
         }
         let input = serde_json::from_value(payload()).unwrap();
         assert_eq!(
-            renderer.generate(collect_all_segments(&config, &input).unwrap()),
+            renderer
+                .generate(collect_all_segments(&config, &ModelConfig::default(), &input).unwrap()),
             ""
         );
     }
@@ -94,7 +88,7 @@ mod tests {
         let mut value = payload();
         value["effort"] = json!({ "level": "high" });
         let input = serde_json::from_value(value).unwrap();
-        let data = collect_all_segments(&restored, &input).unwrap();
+        let data = collect_all_segments(&restored, &ModelConfig::default(), &input).unwrap();
         assert!(data.is_empty());
         assert_eq!(StatusLineGenerator::new(restored).generate(data), "");
     }
@@ -122,11 +116,13 @@ mod tests {
                     for segment in &mut config.segments {
                         segment.enabled = true;
                     }
-                    let expected = StatusLineGenerator::new(config.clone())
-                        .generate(collect_all_segments(&config, &input).unwrap());
+                    let expected = StatusLineGenerator::new(config.clone()).generate(
+                        collect_all_segments(&config, &ModelConfig::default(), &input).unwrap(),
+                    );
                     config.segments.insert(position, effort);
-                    let actual = StatusLineGenerator::new(config.clone())
-                        .generate(collect_all_segments(&config, &input).unwrap());
+                    let actual = StatusLineGenerator::new(config.clone()).generate(
+                        collect_all_segments(&config, &ModelConfig::default(), &input).unwrap(),
+                    );
                     assert_eq!(actual, expected, "position {position}, mode {mode:?}");
                 }
             }

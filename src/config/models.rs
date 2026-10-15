@@ -1,10 +1,14 @@
+use super::paths;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
 
+/// Model display names. Context window sizes come from Claude Code's `context_window` input,
+/// so this file only customizes how model IDs are shown.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ModelConfig {
     #[serde(rename = "models", default)]
     pub model_entries: Vec<ModelEntry>,
@@ -13,19 +17,19 @@ pub struct ModelConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ModelEntry {
     pub pattern: String,
     pub display_name: String,
-    pub context_limit: u32,
 }
 
-/// Context modifier that overrides context limits and appends a suffix to display names.
-/// For example, `[1m]` in a model ID indicates 1M context window, regardless of the base model.
+/// Appends a suffix to display names when the model ID contains `pattern`.
+/// For example, `[1m]` in a model ID selects the 1M context variant, regardless of the base model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContextModifier {
     pub pattern: String,
     pub display_suffix: String,
-    pub context_limit: u32,
 }
 
 /// Built-in Claude model family definition (internal, not serialized).
@@ -37,7 +41,6 @@ pub struct ContextModifier {
 struct BuiltinModelFamily {
     regex: Regex,
     display_prefix: String,
-    context_limit: u32,
 }
 
 impl BuiltinModelFamily {
@@ -53,7 +56,7 @@ impl BuiltinModelFamily {
     /// The boundary is consumed but only named capture groups are used for version extraction.
     /// Rust's `regex` crate does not support lookahead, so the NFA engine's natural
     /// backtracking prevents date digits from being captured as minor version numbers.
-    fn new(keyword: &str, display_prefix: &str, context_limit: u32) -> Self {
+    fn new(keyword: &str, display_prefix: &str) -> Self {
         let pattern = format!(
             r"(?:(?P<pre_major>\d{{1,2}})(?:-(?P<pre_minor>\d{{1,2}}))?-{kw}|{kw}-(?P<post_major>\d{{1,2}})(?:-(?P<post_minor>\d{{1,2}}))?)(?:-\d{{3,}}|-[a-z]|\[|$)",
             kw = keyword
@@ -61,7 +64,6 @@ impl BuiltinModelFamily {
         Self {
             regex: Regex::new(&pattern).expect("built-in family regex should compile"),
             display_prefix: display_prefix.to_string(),
-            context_limit,
         }
     }
 
@@ -91,7 +93,7 @@ impl BuiltinModelFamily {
 
 /// Lazily-initialized built-in Claude model families.
 /// Regex compilation happens only once per process, regardless of how many times
-/// `get_display_name()` or `get_context_limit()` are called.
+/// `get_display_name()` is called.
 static BUILTIN_FAMILIES: OnceLock<Vec<BuiltinModelFamily>> = OnceLock::new();
 
 impl ModelConfig {
@@ -99,190 +101,120 @@ impl ModelConfig {
     fn builtin_families() -> &'static [BuiltinModelFamily] {
         BUILTIN_FAMILIES.get_or_init(|| {
             vec![
-                BuiltinModelFamily::new("sonnet", "Sonnet", 200_000),
-                BuiltinModelFamily::new("opus", "Opus", 200_000),
-                BuiltinModelFamily::new("haiku", "Haiku", 200_000),
+                BuiltinModelFamily::new("sonnet", "Sonnet"),
+                BuiltinModelFamily::new("opus", "Opus"),
+                BuiltinModelFamily::new("haiku", "Haiku"),
             ]
         })
     }
 
     /// Try to match a model ID against built-in Claude model families.
-    /// Returns `(display_name, context_limit)` if matched.
-    fn match_builtin_family(model_id: &str) -> Option<(String, u32)> {
+    fn match_builtin_family(model_id: &str) -> Option<String> {
         let model_lower = model_id.to_lowercase();
-        for family in Self::builtin_families() {
-            if let Some(name) = family.match_model(&model_lower) {
-                return Some((name, family.context_limit));
-            }
-        }
-        None
+        Self::builtin_families()
+            .iter()
+            .find_map(|family| family.match_model(&model_lower))
     }
 
-    /// Load model configuration from TOML file
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
-        let content = fs::read_to_string(path)?;
-        let config: ModelConfig = toml::from_str(&content)?;
-        Ok(config)
+    /// Load `models.toml` from ccline's configuration directory, with its entries taking
+    /// priority over the built-in ones. A missing file means the built-in entries only; a file
+    /// that cannot be read or parsed is an error.
+    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+        let path = paths::models_path()?;
+        let Some(content) = paths::read_optional(&path)? else {
+            return Ok(Self::default());
+        };
+        let user: ModelConfig = toml::from_str(&content).map_err(|error| {
+            let hint = if super::migration::has_obsolete_fields(&content) {
+                "\nRun `ccline --config`, or Initialize Config from the `ccline` menu, to remove \
+                 obsolete fields automatically."
+            } else {
+                ""
+            };
+            format!("Invalid {}: {error}{hint}", path.display())
+        })?;
+        Ok(user.prepend_to(Self::default()))
     }
 
-    /// Load model configuration with fallback locations
-    pub fn load() -> Self {
-        let mut model_config = Self::default();
-
-        // First, try to create default models.toml if it doesn't exist
-        if let Some(home_dir) = dirs::home_dir() {
-            let user_models_path = home_dir.join(".claude").join("ccline").join("models.toml");
-            if !user_models_path.exists() {
-                let _ = Self::create_default_file(&user_models_path);
-            }
-        }
-
-        // Try loading from user config directory first, then local
-        let config_paths = [
-            dirs::home_dir().map(|d| d.join(".claude").join("ccline").join("models.toml")),
-            Some(Path::new("models.toml").to_path_buf()),
-        ];
-
-        for path in config_paths.iter().flatten() {
-            if path.exists() {
-                if let Ok(config) = Self::load_from_file(path) {
-                    // Prepend external models to built-in ones for priority
-                    let mut merged_entries = config.model_entries;
-                    merged_entries.extend(model_config.model_entries);
-                    model_config.model_entries = merged_entries;
-
-                    // Prepend external modifiers to built-in ones for priority
-                    let mut merged_modifiers = config.context_modifiers;
-                    merged_modifiers.extend(model_config.context_modifiers);
-                    model_config.context_modifiers = merged_modifiers;
-
-                    return model_config;
-                }
-            }
-        }
-
-        // Fallback to default configuration if no file found
-        model_config
+    fn prepend_to(mut self, builtin: Self) -> Self {
+        self.model_entries.extend(builtin.model_entries);
+        self.context_modifiers.extend(builtin.context_modifiers);
+        self
     }
 
     /// Resolve a model ID in a single pass through all matching layers.
-    /// Returns `(display_name, context_limit, modifier_suffix)`.
+    /// Returns `(display_name, modifier_suffix)`.
     ///
     /// Matching priority for display_name:
     ///   1. User/built-in model entries (simple substring match)
     ///   2. Built-in Claude model families (regex with version extraction)
     ///   3. None (caller should use upstream fallback)
-    ///
-    /// Matching priority for context_limit:
-    ///   1. Context modifiers (e.g., `[1m]` → 1M) — highest priority
-    ///   2. Model entries / built-in families (from whichever matched display_name)
-    ///   3. Default (200k)
-    fn resolve(&self, model_id: &str) -> (Option<String>, u32, Option<String>) {
+    fn resolve(&self, model_id: &str) -> (Option<String>, Option<String>) {
         let model_lower = model_id.to_lowercase();
 
-        // Phase 1: Find base display name and its context_limit
-        let (base_name, base_limit) = self
+        let base_name = self
             .model_entries
             .iter()
             .find(|e| model_lower.contains(&e.pattern.to_lowercase()))
-            .map(|e| (Some(e.display_name.clone()), Some(e.context_limit)))
-            .unwrap_or_else(|| {
-                Self::match_builtin_family(model_id)
-                    .map(|(name, limit)| (Some(name), Some(limit)))
-                    .unwrap_or((None, None))
-            });
+            .map(|e| e.display_name.clone())
+            .or_else(|| Self::match_builtin_family(model_id));
 
-        // Phase 2: Find matching context modifier (independent of model identity)
-        let modifier = self
+        let modifier_suffix = self
             .context_modifiers
             .iter()
-            .find(|m| model_lower.contains(&m.pattern.to_lowercase()));
+            .find(|m| model_lower.contains(&m.pattern.to_lowercase()))
+            .map(|m| m.display_suffix.clone());
 
-        // Compose display name with modifier suffix
-        let display_name = match (&base_name, modifier) {
-            (Some(name), Some(m)) => Some(format!("{}{}", name, m.display_suffix)),
-            (Some(name), None) => Some(name.clone()),
-            (None, _) => None,
-        };
+        let display_name = base_name.map(|name| match &modifier_suffix {
+            Some(suffix) => format!("{name}{suffix}"),
+            None => name,
+        });
 
-        // Context limit: modifier overrides base
-        let context_limit = modifier
-            .map(|m| m.context_limit)
-            .or(base_limit)
-            .unwrap_or(200_000);
-
-        let modifier_suffix = modifier.map(|m| m.display_suffix.clone());
-
-        (display_name, context_limit, modifier_suffix)
-    }
-
-    /// Get context limit for a model based on ID pattern matching.
-    /// Priority: context modifiers > model entries > built-in families > default (200k).
-    pub fn get_context_limit(&self, model_id: &str) -> u32 {
-        let (_, limit, _) = self.resolve(model_id);
-        limit
-    }
-
-    /// Try to get context limit for a model, returns None if no match found.
-    /// Returns `Some(limit)` if any layer matched (modifier, entry, or builtin family).
-    pub fn try_get_context_limit(&self, model_id: &str) -> Option<u32> {
-        let (display_name, limit, modifier_suffix) = self.resolve(model_id);
-        if display_name.is_some() || modifier_suffix.is_some() {
-            Some(limit)
-        } else {
-            None
-        }
+        (display_name, modifier_suffix)
     }
 
     /// Get display name for a model using layered matching.
     /// Composes base name with any matching context modifier suffix.
     /// Returns None if nothing matches (caller should use upstream fallback display_name).
     pub fn get_display_name(&self, model_id: &str) -> Option<String> {
-        let (display_name, _, _) = self.resolve(model_id);
-        display_name
+        self.resolve(model_id).0
     }
 
     /// Get the display suffix from any matching context modifier.
     /// Used to append modifier info (e.g., " 1M") to upstream fallback display names
     /// when the model itself is not recognized by our config.
     pub fn get_display_suffix(&self, model_id: &str) -> Option<String> {
-        let (_, _, suffix) = self.resolve(model_id);
-        suffix
+        self.resolve(model_id).1
     }
 
     /// Create default model configuration file with minimal template
     pub fn create_default_file<P: AsRef<Path>>(path: P) -> Result<(), Box<dyn std::error::Error>> {
-        // Add comments and examples to the template
         let template_content = "# CCometixLine Model Configuration\n\
-             # This file defines model display names and context limits for different LLM models\n\
-             # File location: ~/.claude/ccline/models.toml\n\
+             # This file customizes how model IDs are displayed.\n\
+             # Context window sizes and usage come from Claude Code's status line input,\n\
+             # so they are not configured here.\n\
              #\n\
              # Claude models are automatically recognized (Sonnet, Opus, Haiku) with\n\
              # version extraction. You only need to add entries here for overrides or\n\
              # third-party models.\n\
              \n\
-             # Model configurations (simple substring matching)\n\
-             # Each [[models]] section defines a model pattern and its properties\n\
+             # Model display names (simple substring matching)\n\
              # These take priority over built-in Claude model recognition\n\
              \n\
              # Example:\n\
              # [[models]]\n\
              # pattern = \"my-model\"\n\
              # display_name = \"My Model\"\n\
-             # context_limit = 128000\n\
              \n\
-             # Context modifiers override context limits and append suffix to display names\n\
-             # They are matched independently, enabling composition:\n\
+             # Context modifiers append a suffix to display names. They are matched\n\
+             # independently, enabling composition:\n\
              #   model \"Opus 4\" + modifier \" 1M\" = \"Opus 4 1M\"\n\
              \n\
              # Example:\n\
              # [[context_modifiers]]\n\
              # pattern = \"[1m]\"\n\
-             # display_suffix = \" 1M\"\n\
-             # context_limit = 1000000\n"
-            .to_string();
+             # display_suffix = \" 1M\"\n";
 
-        // Create parent directory if it doesn't exist
         if let Some(parent) = path.as_ref().parent() {
             fs::create_dir_all(parent)?;
         }
@@ -297,33 +229,72 @@ impl Default for ModelConfig {
         Self {
             // Only third-party models need explicit entries.
             // Claude models (Sonnet, Opus, Haiku) are handled by built-in regex families.
-            model_entries: vec![
-                ModelEntry {
-                    pattern: "glm-4.5".to_string(),
-                    display_name: "GLM-4.5".to_string(),
-                    context_limit: 128_000,
-                },
-                ModelEntry {
-                    pattern: "kimi-k2-turbo".to_string(),
-                    display_name: "Kimi K2 Turbo".to_string(),
-                    context_limit: 128_000,
-                },
-                ModelEntry {
-                    pattern: "kimi-k2".to_string(),
-                    display_name: "Kimi K2".to_string(),
-                    context_limit: 128_000,
-                },
-                ModelEntry {
-                    pattern: "qwen3-coder".to_string(),
-                    display_name: "Qwen Coder".to_string(),
-                    context_limit: 256_000,
-                },
-            ],
+            model_entries: [
+                ("glm-4.5", "GLM-4.5"),
+                ("kimi-k2-turbo", "Kimi K2 Turbo"),
+                ("kimi-k2", "Kimi K2"),
+                ("qwen3-coder", "Qwen Coder"),
+            ]
+            .into_iter()
+            .map(|(pattern, display_name)| ModelEntry {
+                pattern: pattern.to_string(),
+                display_name: display_name.to_string(),
+            })
+            .collect(),
             context_modifiers: vec![ContextModifier {
                 pattern: "[1m]".to_string(),
                 display_suffix: " 1M".to_string(),
-                context_limit: 1_000_000,
             }],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_names_compose_entries_families_and_modifiers() {
+        let models = ModelConfig::default();
+        assert_eq!(
+            models.get_display_name("claude-opus-5-5[1m]").as_deref(),
+            Some("Opus 5.5 1M")
+        );
+        assert_eq!(
+            models.get_display_name("claude-sonnet-5-5").as_deref(),
+            Some("Sonnet 5.5")
+        );
+        assert_eq!(
+            models.get_display_name("kimi-k2-turbo").as_deref(),
+            Some("Kimi K2 Turbo")
+        );
+        assert_eq!(models.get_display_name("unknown[1m]"), None);
+        assert_eq!(
+            models.get_display_suffix("unknown[1m]").as_deref(),
+            Some(" 1M")
+        );
+        let user: ModelConfig =
+            toml::from_str("[[models]]\npattern = \"opus\"\ndisplay_name = \"Big\"\n").unwrap();
+        let merged = user.prepend_to(ModelConfig::default());
+        assert_eq!(
+            merged.get_display_name("claude-opus-5-5").as_deref(),
+            Some("Big")
+        );
+    }
+
+    #[test]
+    fn template_parses_and_removed_capacity_fields_are_rejected() {
+        let dir = crate::test_support::TestDir::new();
+        let path = dir.0.join("models.toml");
+        ModelConfig::create_default_file(&path).unwrap();
+        let template: ModelConfig = toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(template.model_entries.is_empty());
+        for legacy in [
+            "[[models]]\npattern = \"x\"\ndisplay_name = \"X\"\ncontext_limit = 128000\n",
+            "[[context_modifiers]]\npattern = \"[1m]\"\ndisplay_suffix = \" 1M\"\ncontext_limit = 1000000\n",
+        ] {
+            let error = toml::from_str::<ModelConfig>(legacy).unwrap_err();
+            assert!(error.to_string().contains("context_limit"), "{error}");
         }
     }
 }

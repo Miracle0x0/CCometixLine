@@ -1,6 +1,10 @@
+use super::migration::migrate_models_file;
+use super::models::ModelConfig;
+use super::paths;
 use super::types::Config;
+use crate::ui::themes::ThemePresets;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Result of config initialization
 #[derive(Debug)]
@@ -14,163 +18,63 @@ pub enum InitResult {
 pub struct ConfigLoader;
 
 impl ConfigLoader {
-    pub fn load() -> Config {
-        Config::load().unwrap_or_else(|_| Config::default())
-    }
-
-    pub fn load_from_path<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn std::error::Error>> {
-        let content = fs::read_to_string(path)?;
-        let config: Config = toml::from_str(&content)?;
-        Ok(config)
-    }
-
-    /// Initialize themes directory and create built-in theme files
-    pub fn init_themes() -> Result<(), Box<dyn std::error::Error>> {
-        let themes_dir = Self::get_themes_path();
-
-        // Create themes directory
+    /// Create the built-in theme files and the `models.toml` template where they are missing, and
+    /// remove obsolete fields from an existing `models.toml`, returning a note about that cleanup.
+    /// Only explicit initialization calls this; rendering never writes files.
+    pub fn init_files() -> Result<Option<String>, Box<dyn std::error::Error>> {
+        let themes_dir = paths::themes_dir()?;
         fs::create_dir_all(&themes_dir)?;
-
-        let builtin_themes = [
-            "cometix",
-            "default",
-            "minimal",
-            "gruvbox",
-            "nord",
-            "powerline-dark",
-            "powerline-light",
-            "powerline-rose-pine",
-            "powerline-tokyo-night",
-        ];
-        let mut created_any = false;
-
-        for theme_name in &builtin_themes {
-            let theme_path = themes_dir.join(format!("{}.toml", theme_name));
-
+        for theme_name in ThemePresets::BUILTIN_THEMES {
+            let theme_path = themes_dir.join(format!("{theme_name}.toml"));
             if !theme_path.exists() {
-                let theme_config = crate::ui::themes::ThemePresets::get_theme(theme_name);
-                let content = toml::to_string_pretty(&theme_config)?;
-                fs::write(&theme_path, content)?;
-                println!("Created theme file: {}", theme_path.display());
-                created_any = true;
+                let theme_config = ThemePresets::builtin(theme_name)
+                    .ok_or_else(|| format!("Missing built-in theme {theme_name}"))?;
+                fs::write(&theme_path, toml::to_string_pretty(&theme_config)?)?;
             }
         }
-
-        if !created_any {
-            // println!("All built-in theme files already exist");
+        let models_path = paths::models_path()?;
+        if !models_path.exists() {
+            ModelConfig::create_default_file(&models_path)?;
+            return Ok(None);
         }
-
-        Ok(())
-    }
-
-    /// Get the themes directory path (~/.claude/ccline/themes/)
-    pub fn get_themes_path() -> PathBuf {
-        if let Some(home) = dirs::home_dir() {
-            home.join(".claude").join("ccline").join("themes")
-        } else {
-            PathBuf::from(".claude/ccline/themes")
-        }
-    }
-
-    /// Ensure themes directory exists and has built-in themes (silent mode)
-    pub fn ensure_themes_exist() {
-        // Silently ensure themes exist without printing output
-        let _ = Self::init_themes_silent();
-    }
-
-    /// Initialize themes directory and create built-in theme files (silent mode)
-    fn init_themes_silent() -> Result<(), Box<dyn std::error::Error>> {
-        let themes_dir = Self::get_themes_path();
-
-        // Create themes directory
-        fs::create_dir_all(&themes_dir)?;
-
-        let builtin_themes = [
-            "default",
-            "minimal",
-            "gruvbox",
-            "nord",
-            "cometix",
-            "powerline-dark",
-            "powerline-light",
-            "powerline-rose-pine",
-            "powerline-tokyo-night",
-        ];
-
-        for theme_name in &builtin_themes {
-            let theme_path = themes_dir.join(format!("{}.toml", theme_name));
-
-            if !theme_path.exists() {
-                let theme_config = crate::ui::themes::ThemePresets::get_theme(theme_name);
-                let content = toml::to_string_pretty(&theme_config)?;
-                fs::write(&theme_path, content)?;
-            }
-        }
-
-        Ok(())
+        let timestamp = chrono::Local::now().format("%Y%m%d%H%M%S").to_string();
+        Ok(migrate_models_file(&models_path, &timestamp)?.map(|migration| migration.message()))
     }
 }
 
 impl Config {
-    /// Load configuration from default location
+    /// Load the configuration; a missing file means the default theme, any other failure is an error.
     pub fn load() -> Result<Config, Box<dyn std::error::Error>> {
-        // Ensure themes directory exists and has built-in themes
-        ConfigLoader::ensure_themes_exist();
-
-        let config_path = Self::get_config_path();
-
-        if !config_path.exists() {
-            return Ok(Config::default());
+        let config_path = paths::config_path()?;
+        match paths::read_optional(&config_path)? {
+            Some(content) => toml::from_str(&content)
+                .map_err(|error| format!("Invalid {}: {error}", config_path.display()).into()),
+            None => Ok(Config::default()),
         }
-
-        let content = fs::read_to_string(config_path)?;
-        let config: Config = toml::from_str(&content)?;
-        Ok(config)
     }
 
     /// Save configuration to default location
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let config_path = Self::get_config_path();
-
-        // Ensure config directory exists
+        let config_path = paths::config_path()?;
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)?;
         }
-
-        let content = toml::to_string_pretty(self)?;
-        fs::write(config_path, content)?;
+        fs::write(config_path, toml::to_string_pretty(self)?)?;
         Ok(())
     }
 
-    /// Get the default config file path (~/.claude/ccline/config.toml)
-    fn get_config_path() -> PathBuf {
-        if let Some(home) = dirs::home_dir() {
-            home.join(".claude").join("ccline").join("config.toml")
+    /// Initialize config directory and create default config, with any note from
+    /// [`ConfigLoader::init_files`].
+    pub fn init() -> Result<(InitResult, Option<String>), Box<dyn std::error::Error>> {
+        let config_path = paths::config_path()?;
+        let note = ConfigLoader::init_files()?;
+        let result = if config_path.exists() {
+            InitResult::AlreadyExists(config_path)
         } else {
-            PathBuf::from(".claude/ccline/config.toml")
-        }
-    }
-
-    /// Initialize config directory and create default config
-    pub fn init() -> Result<InitResult, Box<dyn std::error::Error>> {
-        let config_path = Self::get_config_path();
-
-        // Create directory
-        if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        // Initialize themes directory and built-in themes
-        ConfigLoader::init_themes()?;
-
-        // Create default config if it doesn't exist
-        if !config_path.exists() {
-            let default_config = Config::default();
-            default_config.save()?;
-            Ok(InitResult::Created(config_path))
-        } else {
-            Ok(InitResult::AlreadyExists(config_path))
-        }
+            Config::default().save()?;
+            InitResult::Created(config_path)
+        };
+        Ok((result, note))
     }
 
     /// Validate configuration

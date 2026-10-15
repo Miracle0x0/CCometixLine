@@ -1,4 +1,3 @@
-pub mod agents;
 pub mod context_window;
 pub mod cost;
 pub mod directory;
@@ -26,21 +25,18 @@ pub struct SegmentData {
     pub metadata: HashMap<String, String>,
 }
 
-/// Keep variable-length agent activity structured until the entire line is laid out.
-#[derive(Debug, Clone)]
-pub enum SegmentContent {
-    Text(SegmentData),
-    Agents(agents::AgentSummary),
-}
-
-impl From<SegmentData> for SegmentContent {
-    fn from(data: SegmentData) -> Self {
-        Self::Text(data)
-    }
+/// The smallest status line input Claude Code sends, shared by segment tests.
+#[cfg(test)]
+pub(crate) fn test_payload() -> serde_json::Value {
+    serde_json::json!({
+        "session_id": "segment-test",
+        "model": { "id": "claude-opus-4-6", "display_name": "Opus 4.6" },
+        "workspace": { "current_dir": "/work/project" },
+        "context_window": { "context_window_size": 200000 }
+    })
 }
 
 // Re-export all segment types
-pub use agents::AgentsSegment;
 pub use context_window::ContextWindowSegment;
 pub use cost::CostSegment;
 pub use directory::DirectorySegment;

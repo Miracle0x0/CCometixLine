@@ -1,22 +1,15 @@
 use super::{Segment, SegmentData};
-use crate::config::{InputData, ModelConfig, SegmentId, TranscriptEntry};
+use crate::config::{InputData, SegmentId};
 use std::collections::HashMap;
-use std::fs;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
 
+/// Context usage exactly as Claude Code reports it in `context_window`; null values are shown
+/// as unknown rather than recovered from the transcript or replaced with zero.
 #[derive(Default)]
 pub struct ContextWindowSegment;
 
 impl ContextWindowSegment {
     pub fn new() -> Self {
         Self
-    }
-
-    /// Get context limit for the specified model
-    fn get_context_limit_for_model(model_id: &str) -> u32 {
-        let model_config = ModelConfig::load();
-        model_config.get_context_limit(model_id)
     }
 }
 
@@ -34,50 +27,44 @@ pub fn format_tokens(tokens: u64) -> String {
     }
 }
 
+fn format_percentage(percentage: f64) -> String {
+    if percentage.fract() == 0.0 {
+        format!("{:.0}%", percentage)
+    } else {
+        format!("{:.1}%", percentage)
+    }
+}
+
 impl Segment for ContextWindowSegment {
     fn collect(&self, input: &InputData) -> Option<SegmentData> {
-        // Dynamically determine context limit based on current model ID
-        let context_limit = Self::get_context_limit_for_model(&input.model.id);
-
-        let context_used_token_opt = parse_transcript_usage(&input.transcript_path);
-
-        let (percentage_display, tokens_display) = match context_used_token_opt {
-            Some(context_used_token) => {
-                let context_used_rate = (context_used_token as f64 / context_limit as f64) * 100.0;
-
-                let percentage = if context_used_rate.fract() == 0.0 {
-                    format!("{:.0}%", context_used_rate)
-                } else {
-                    format!("{:.1}%", context_used_rate)
-                };
-
-                let tokens = format_tokens(context_used_token.into());
-
-                (percentage, tokens)
-            }
-            None => {
-                // No usage data available
-                ("-".to_string(), "-".to_string())
-            }
-        };
+        let window = &input.context_window;
+        let tokens = window
+            .current_usage
+            .as_ref()
+            .map(|usage| usage.context_tokens());
+        let unknown = || "-".to_string();
 
         let mut metadata = HashMap::new();
-        match context_used_token_opt {
-            Some(context_used_token) => {
-                let context_used_rate = (context_used_token as f64 / context_limit as f64) * 100.0;
-                metadata.insert("tokens".to_string(), context_used_token.to_string());
-                metadata.insert("percentage".to_string(), context_used_rate.to_string());
-            }
-            None => {
-                metadata.insert("tokens".to_string(), "-".to_string());
-                metadata.insert("percentage".to_string(), "-".to_string());
-            }
-        }
-        metadata.insert("limit".to_string(), context_limit.to_string());
-        metadata.insert("model".to_string(), input.model.id.clone());
+        metadata.insert(
+            "percentage".to_string(),
+            window
+                .used_percentage
+                .map_or_else(unknown, |percentage| percentage.to_string()),
+        );
+        metadata.insert(
+            "tokens".to_string(),
+            tokens.map_or_else(unknown, |tokens| tokens.to_string()),
+        );
+        metadata.insert("limit".to_string(), window.context_window_size.to_string());
 
         Some(SegmentData {
-            primary: format!("{} · {} tokens", percentage_display, tokens_display),
+            primary: format!(
+                "{} · {} tokens",
+                window
+                    .used_percentage
+                    .map_or_else(unknown, format_percentage),
+                tokens.map_or_else(unknown, format_tokens)
+            ),
             secondary: String::new(),
             metadata,
         })
@@ -88,142 +75,98 @@ impl Segment for ContextWindowSegment {
     }
 }
 
-fn parse_transcript_usage<P: AsRef<Path>>(transcript_path: P) -> Option<u32> {
-    // Only the current session's transcript is a valid source. When the file
-    // doesn't exist yet (a new session before the first assistant reply),
-    // report no data so the segment renders a placeholder instead of leaking
-    // another session's usage (see issue #131).
-    try_parse_transcript_file(transcript_path.as_ref())
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
 
-fn try_parse_transcript_file(path: &Path) -> Option<u32> {
-    let file = fs::File::open(path).ok()?;
-    let reader = BufReader::new(file);
-    let lines: Vec<String> = reader
-        .lines()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap_or_default();
-
-    if lines.is_empty() {
-        return None;
+    fn input(context_window: Value) -> InputData {
+        let mut payload = crate::core::segments::test_payload();
+        payload["context_window"] = context_window;
+        serde_json::from_value(payload).unwrap()
     }
 
-    // Check if the last line is a summary
-    let last_line = lines.last()?.trim();
-    if let Ok(entry) = serde_json::from_str::<TranscriptEntry>(last_line) {
-        if entry.r#type.as_deref() == Some("summary") {
-            // Handle summary case: find usage by leafUuid
-            if let Some(leaf_uuid) = &entry.leaf_uuid {
-                let project_dir = path.parent()?;
-                return find_usage_by_leaf_uuid(leaf_uuid, project_dir);
-            }
-        }
-    }
-
-    // Normal case: find the last assistant message in current file
-    for line in lines.iter().rev() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        if let Ok(entry) = serde_json::from_str::<TranscriptEntry>(line) {
-            if entry.r#type.as_deref() == Some("assistant") {
-                if let Some(message) = &entry.message {
-                    if let Some(raw_usage) = &message.usage {
-                        let normalized = raw_usage.clone().normalize();
-                        return Some(normalized.display_tokens());
-                    }
+    #[test]
+    fn uses_the_hosts_percentage_and_input_only_tokens_for_a_1m_window() {
+        // 200K input across fresh and cached tokens plus 10K output in a 1M window: the host
+        // reports 20%, and output tokens are not counted toward the context.
+        let data = ContextWindowSegment::new()
+            .collect(&input(json!({
+                "total_input_tokens": 200_000,
+                "total_output_tokens": 10_000,
+                "context_window_size": 1_000_000,
+                "used_percentage": 20,
+                "remaining_percentage": 80,
+                "current_usage": {
+                    "input_tokens": 150_000,
+                    "output_tokens": 10_000,
+                    "cache_creation_input_tokens": 30_000,
+                    "cache_read_input_tokens": 20_000
                 }
-            }
-        }
-    }
+            })))
+            .unwrap();
+        assert_eq!(data.primary, "20% · 200k tokens");
+        assert_eq!(data.metadata["limit"], "1000000");
+        assert_eq!(data.metadata["tokens"], "200000");
 
-    None
-}
-
-fn find_usage_by_leaf_uuid(leaf_uuid: &str, project_dir: &Path) -> Option<u32> {
-    // Search for the leafUuid across all session files in the project directory
-    let entries = fs::read_dir(project_dir).ok()?;
-
-    for entry in entries {
-        let entry = entry.ok()?;
-        let path = entry.path();
-
-        if path.extension().and_then(|s| s.to_str()) != Some("jsonl") {
-            continue;
-        }
-
-        if let Some(usage) = search_uuid_in_file(&path, leaf_uuid) {
-            return Some(usage);
-        }
-    }
-
-    None
-}
-
-fn search_uuid_in_file(path: &Path, target_uuid: &str) -> Option<u32> {
-    let file = fs::File::open(path).ok()?;
-    let reader = BufReader::new(file);
-    let lines: Vec<String> = reader
-        .lines()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap_or_default();
-
-    // Find the message with target_uuid
-    for line in &lines {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        if let Ok(entry) = serde_json::from_str::<TranscriptEntry>(line) {
-            if let Some(uuid) = &entry.uuid {
-                if uuid == target_uuid {
-                    // Found the target message, check its type
-                    if entry.r#type.as_deref() == Some("assistant") {
-                        // Direct assistant message with usage
-                        if let Some(message) = &entry.message {
-                            if let Some(raw_usage) = &message.usage {
-                                let normalized = raw_usage.clone().normalize();
-                                return Some(normalized.display_tokens());
-                            }
-                        }
-                    } else if entry.r#type.as_deref() == Some("user") {
-                        // User message, need to find the parent assistant message
-                        if let Some(parent_uuid) = &entry.parent_uuid {
-                            return find_assistant_message_by_uuid(&lines, parent_uuid);
-                        }
-                    }
-                    break;
+        let fractional = ContextWindowSegment::new()
+            .collect(&input(json!({
+                "context_window_size": 200_000,
+                "used_percentage": 7.75,
+                "current_usage": {
+                    "input_tokens": 8_500,
+                    "output_tokens": 1_200,
+                    "cache_creation_input_tokens": 5_000,
+                    "cache_read_input_tokens": 2_000
                 }
-            }
-        }
+            })))
+            .unwrap();
+        assert_eq!(fractional.primary, "7.8% · 15.5k tokens");
     }
 
-    None
-}
+    #[test]
+    fn null_values_before_the_first_response_and_after_compact_are_unknown() {
+        // Session start: nothing reported yet.
+        let start = ContextWindowSegment::new()
+            .collect(&input(json!({
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "context_window_size": 1_000_000,
+                "used_percentage": null,
+                "remaining_percentage": null,
+                "current_usage": null
+            })))
+            .unwrap();
+        assert_eq!(start.primary, "- · - tokens");
+        assert_eq!(start.metadata["percentage"], "-");
+        assert_eq!(start.metadata["tokens"], "-");
 
-fn find_assistant_message_by_uuid(lines: &[String], target_uuid: &str) -> Option<u32> {
-    for line in lines {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        if let Ok(entry) = serde_json::from_str::<TranscriptEntry>(line) {
-            if let Some(uuid) = &entry.uuid {
-                if uuid == target_uuid && entry.r#type.as_deref() == Some("assistant") {
-                    if let Some(message) = &entry.message {
-                        if let Some(raw_usage) = &message.usage {
-                            let normalized = raw_usage.clone().normalize();
-                            return Some(normalized.display_tokens());
-                        }
-                    }
-                }
-            }
-        }
+        // Right after /compact the breakdown is null until the next API call; whatever the host
+        // still reports is shown as is, and nothing is recovered from older data.
+        let compacted = ContextWindowSegment::new()
+            .collect(&input(json!({
+                "context_window_size": 200_000,
+                "used_percentage": 3,
+                "current_usage": null
+            })))
+            .unwrap();
+        assert_eq!(compacted.primary, "3% · - tokens");
     }
 
-    None
+    #[test]
+    fn missing_or_malformed_context_window_is_a_deserialization_error() {
+        let mut base = crate::core::segments::test_payload();
+        base.as_object_mut().unwrap().remove("context_window");
+        assert!(serde_json::from_value::<InputData>(base.clone()).is_err());
+        for window in [
+            json!({}),
+            json!({"context_window_size": "1M"}),
+            json!({"context_window_size": 200_000, "used_percentage": "8"}),
+            json!({"context_window_size": 200_000, "current_usage": {"input_tokens": 1}}),
+        ] {
+            let mut value = base.clone();
+            value["context_window"] = window;
+            assert!(serde_json::from_value::<InputData>(value).is_err());
+        }
+    }
 }

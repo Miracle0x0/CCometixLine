@@ -37,15 +37,8 @@ impl UpdateState {
     }
 
     /// Load update state from config directory and trigger auto-check if needed
-    pub fn load() -> Self {
-        let config_dir = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".claude")
-            .join("ccline");
-
-        let state_file = config_dir.join(".update_state.json");
-
-        let mut state = if let Ok(content) = std::fs::read_to_string(&state_file) {
+    pub fn load(state_file: &std::path::Path) -> Self {
+        let mut state = if let Ok(content) = std::fs::read_to_string(state_file) {
             serde_json::from_str::<UpdateState>(&content).unwrap_or_else(|_| UpdateState {
                 current_version: env!("CARGO_PKG_VERSION").to_string(),
                 ..Default::default()
@@ -67,7 +60,7 @@ impl UpdateState {
             if should_start_check {
                 state.update_pid = Some(std::process::id());
                 state.last_check = Some(Utc::now());
-                let _ = state.save();
+                let _ = state.save(state_file);
 
                 match github::check_for_updates() {
                     Ok(Some(version)) => {
@@ -88,7 +81,7 @@ impl UpdateState {
                 }
 
                 state.update_pid = None;
-                let _ = state.save();
+                let _ = state.save(state_file);
             }
         }
 
@@ -124,17 +117,13 @@ impl UpdateState {
         false
     }
 
-    pub fn save(&self) -> Result<(), std::io::Error> {
-        let config_dir = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".claude")
-            .join("ccline");
-
-        std::fs::create_dir_all(&config_dir)?;
-        let state_file = config_dir.join(".update_state.json");
+    pub fn save(&self, state_file: &std::path::Path) -> Result<(), std::io::Error> {
+        if let Some(config_dir) = state_file.parent() {
+            std::fs::create_dir_all(config_dir)?;
+        }
 
         let content = serde_json::to_string_pretty(self)?;
-        std::fs::write(&state_file, content)?;
+        std::fs::write(state_file, content)?;
 
         Ok(())
     }

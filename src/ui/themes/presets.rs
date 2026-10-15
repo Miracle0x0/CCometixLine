@@ -1,6 +1,6 @@
 // Theme presets for TUI configuration
 
-use crate::config::{Config, StyleConfig, StyleMode};
+use crate::config::{paths, Config, StyleConfig, StyleMode};
 
 // Import all theme modules
 use super::{
@@ -11,6 +11,18 @@ use super::{
 pub struct ThemePresets;
 
 impl ThemePresets {
+    pub const BUILTIN_THEMES: [&'static str; 9] = [
+        "cometix",
+        "default",
+        "minimal",
+        "gruvbox",
+        "nord",
+        "powerline-dark",
+        "powerline-light",
+        "powerline-rose-pine",
+        "powerline-tokyo-night",
+    ];
+
     /// Agents is opt-in in every theme and uses the theme's directory palette.
     pub fn agents_segment(theme_name: &str) -> crate::config::SegmentConfig {
         let mut segment = match theme_name {
@@ -28,13 +40,7 @@ impl ThemePresets {
         segment.enabled = false;
         segment.icon.plain = "&".into();
         segment.icon.nerd_font = "\u{f0c0}".into();
-        segment.options = std::collections::HashMap::from([(
-            "max_agents".to_string(),
-            serde_json::json!(crate::core::segments::AgentsSegment::DEFAULT_MAX_AGENTS),
-        )]);
-        segment
-            .options
-            .insert("experimental_mod".into(), serde_json::json!(false));
+        segment.options.clear();
         segment
     }
 
@@ -53,14 +59,17 @@ impl ThemePresets {
         }
     }
 
-    pub fn get_theme(theme_name: &str) -> Config {
-        // First try to load from file
-        if let Ok(config) = Self::load_theme_from_file(theme_name) {
-            return config;
+    /// A theme file in the themes directory takes priority over the built-in preset of the same
+    /// name. An unreadable or invalid file is an error, as is a name with neither.
+    pub fn get_theme(theme_name: &str) -> Result<Config, Box<dyn std::error::Error>> {
+        if let Some(config) = Self::load_theme_from_file(theme_name)? {
+            return Ok(config);
         }
+        Self::builtin(theme_name).ok_or_else(|| format!("Unknown theme: {theme_name}").into())
+    }
 
-        // Fallback to built-in themes
-        match theme_name {
+    pub fn builtin(theme_name: &str) -> Option<Config> {
+        Some(match theme_name {
             "cometix" => Self::get_cometix(),
             "default" => Self::get_default(),
             "gruvbox" => Self::get_gruvbox(),
@@ -70,40 +79,30 @@ impl ThemePresets {
             "powerline-light" => Self::get_powerline_light(),
             "powerline-rose-pine" => Self::get_powerline_rose_pine(),
             "powerline-tokyo-night" => Self::get_powerline_tokyo_night(),
-            _ => Self::get_default(),
-        }
+            _ => return None,
+        })
     }
 
-    /// Load theme from file system
-    pub fn load_theme_from_file(theme_name: &str) -> Result<Config, Box<dyn std::error::Error>> {
-        let themes_dir = Self::get_themes_path();
-        let theme_path = themes_dir.join(format!("{}.toml", theme_name));
-
-        if !theme_path.exists() {
-            return Err(format!("Theme file not found: {}", theme_path.display()).into());
-        }
-
-        let content = std::fs::read_to_string(&theme_path)?;
-        let mut config: Config = toml::from_str(&content)?;
+    /// Load a theme file; `None` when it does not exist.
+    fn load_theme_from_file(
+        theme_name: &str,
+    ) -> Result<Option<Config>, Box<dyn std::error::Error>> {
+        let theme_path = paths::themes_dir()?.join(format!("{}.toml", theme_name));
+        let Some(content) = paths::read_optional(&theme_path)? else {
+            return Ok(None);
+        };
+        let mut config: Config = toml::from_str(&content)
+            .map_err(|error| format!("Invalid {}: {error}", theme_path.display()))?;
 
         // Ensure the theme field matches the requested theme
         config.theme = theme_name.to_string();
 
-        Ok(config)
-    }
-
-    /// Get the themes directory path (~/.claude/ccline/themes/)
-    fn get_themes_path() -> std::path::PathBuf {
-        if let Some(home) = dirs::home_dir() {
-            home.join(".claude").join("ccline").join("themes")
-        } else {
-            std::path::PathBuf::from(".claude/ccline/themes")
-        }
+        Ok(Some(config))
     }
 
     /// Save current config as a new theme
     pub fn save_theme(theme_name: &str, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-        let themes_dir = Self::get_themes_path();
+        let themes_dir = paths::themes_dir()?;
         let theme_path = themes_dir.join(format!("{}.toml", theme_name));
 
         // Create themes directory if it doesn't exist
@@ -120,34 +119,29 @@ impl ThemePresets {
     }
 
     /// List all available themes (built-in + custom)
-    pub fn list_available_themes() -> Vec<String> {
-        let mut themes = vec![
-            "cometix".to_string(),
-            "default".to_string(),
-            "minimal".to_string(),
-            "gruvbox".to_string(),
-            "nord".to_string(),
-            "powerline-dark".to_string(),
-            "powerline-light".to_string(),
-            "powerline-rose-pine".to_string(),
-            "powerline-tokyo-night".to_string(),
-        ];
-
-        // Add custom themes from file system
-        if let Ok(themes_dir) = std::fs::read_dir(Self::get_themes_path()) {
-            for entry in themes_dir.flatten() {
-                if let Some(name) = entry.file_name().to_str() {
-                    if name.ends_with(".toml") {
-                        let theme_name = name.trim_end_matches(".toml").to_string();
-                        if !themes.contains(&theme_name) {
-                            themes.push(theme_name);
-                        }
-                    }
+    pub fn list_available_themes() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let mut themes: Vec<String> = Self::BUILTIN_THEMES.map(String::from).to_vec();
+        let themes_dir = paths::themes_dir()?;
+        let entries = match std::fs::read_dir(&themes_dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(themes),
+            Err(error) => {
+                return Err(format!("Cannot read {}: {error}", themes_dir.display()).into())
+            }
+        };
+        for entry in entries {
+            let entry = entry?;
+            if let Some(theme_name) = entry
+                .file_name()
+                .to_str()
+                .and_then(|name| name.strip_suffix(".toml"))
+            {
+                if !themes.iter().any(|theme| theme == theme_name) {
+                    themes.push(theme_name.to_string());
                 }
             }
         }
-
-        themes
+        Ok(themes)
     }
 
     pub fn get_available_themes() -> Vec<(&'static str, &'static str)> {

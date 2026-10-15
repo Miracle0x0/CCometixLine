@@ -2,16 +2,17 @@ use super::{Segment, SegmentData};
 use crate::config::{InputData, ModelConfig, SegmentId};
 use std::collections::HashMap;
 
-#[derive(Default)]
-pub struct ModelSegment;
+pub struct ModelSegment<'a> {
+    models: &'a ModelConfig,
+}
 
-impl ModelSegment {
-    pub fn new() -> Self {
-        Self
+impl<'a> ModelSegment<'a> {
+    pub fn new(models: &'a ModelConfig) -> Self {
+        Self { models }
     }
 }
 
-impl Segment for ModelSegment {
+impl Segment for ModelSegment<'_> {
     fn collect(&self, input: &InputData) -> Option<SegmentData> {
         let mut metadata = HashMap::new();
         metadata.insert("model_id".to_string(), input.model.id.clone());
@@ -29,11 +30,9 @@ impl Segment for ModelSegment {
     }
 }
 
-impl ModelSegment {
+impl ModelSegment<'_> {
     fn format_model_name(&self, id: &str, display_name: &str) -> String {
-        let model_config = ModelConfig::load();
-
-        if let Some(config_name) = model_config.get_display_name(id) {
+        if let Some(config_name) = self.models.get_display_name(id) {
             // Model recognized by config, display_name already includes modifier suffix
             config_name
         } else {
@@ -44,7 +43,7 @@ impl ModelSegment {
                 display_name.to_string()
             };
             // Still apply context modifier suffix (e.g., " 1M") if present
-            match model_config.get_display_suffix(id) {
+            match self.models.get_display_suffix(id) {
                 Some(suffix) => format!("{}{}", base, suffix),
                 None => base,
             }

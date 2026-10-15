@@ -1,7 +1,6 @@
 use crate::config::{Config, SegmentId, StyleMode};
 use crate::ui::components::{
     color_picker::{ColorPickerComponent, NavDirection},
-    count_input::CountInputComponent,
     help::HelpComponent,
     icon_selector::IconSelectorComponent,
     name_input::NameInputComponent,
@@ -34,7 +33,6 @@ pub struct App {
     color_picker: ColorPickerComponent,
     icon_selector: IconSelectorComponent,
     name_input: NameInputComponent,
-    max_agents_input: CountInputComponent,
     preview: PreviewComponent,
     segment_list: SegmentListComponent,
     separator_editor: SeparatorEditorComponent,
@@ -56,7 +54,6 @@ impl App {
             color_picker: ColorPickerComponent::new(),
             icon_selector: IconSelectorComponent::new(),
             name_input: NameInputComponent::new(),
-            max_agents_input: CountInputComponent::default(),
             preview: PreviewComponent::new(),
             segment_list: SegmentListComponent::new(),
             separator_editor: SeparatorEditorComponent::new(),
@@ -96,10 +93,9 @@ impl App {
     }
 
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-        // Ensure themes directory and built-in themes exist
-        if let Err(e) = crate::config::loader::ConfigLoader::init_themes() {
-            eprintln!("Warning: Failed to initialize themes: {}", e);
-        }
+        // Create the built-in theme files and models.toml template, or clean up an existing
+        // models.toml, before editing begins.
+        let note = crate::config::ConfigLoader::init_files()?;
 
         // Load config
         let config = Config::load()?;
@@ -112,6 +108,7 @@ impl App {
         let mut terminal = Terminal::new(backend)?;
 
         let mut app = App::new(config);
+        app.status_message = note;
 
         // Main loop
         let result = loop {
@@ -124,25 +121,7 @@ impl App {
                 }
 
                 // Handle popup events first
-                if app.max_agents_input.is_open {
-                    match key.code {
-                        KeyCode::Esc => app.max_agents_input.is_open = false,
-                        KeyCode::Enter => app.apply_max_agents(),
-                        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.max_agents_input.input.clear();
-                            app.max_agents_input.error = None;
-                        }
-                        KeyCode::Char(c) => {
-                            app.max_agents_input.input.push(c);
-                            app.max_agents_input.error = None;
-                        }
-                        KeyCode::Backspace => {
-                            app.max_agents_input.input.pop();
-                            app.max_agents_input.error = None;
-                        }
-                        _ => {}
-                    }
-                } else if app.name_input.is_open {
+                if app.name_input.is_open {
                     match key.code {
                         KeyCode::Esc => app.name_input.close(),
                         KeyCode::Enter => {
@@ -285,7 +264,10 @@ impl App {
 
     fn calculate_theme_selector_height(&self, total_width: u16) -> u16 {
         // Get all available themes dynamically
-        let available_themes = crate::ui::themes::ThemePresets::list_available_themes();
+        let Ok(available_themes) = crate::ui::themes::ThemePresets::list_available_themes() else {
+            // The selector shows the error on a single line.
+            return 3;
+        };
 
         // Calculate available width (minus borders only)
         let content_width = total_width.saturating_sub(2); // Remove borders
@@ -489,9 +471,6 @@ impl App {
         if self.separator_editor.is_open {
             self.separator_editor.render(f, f.area());
         }
-        if self.max_agents_input.is_open {
-            self.max_agents_input.render(f, f.area());
-        }
     }
 
     fn move_selection(&mut self, delta: i32) {
@@ -504,12 +483,7 @@ impl App {
                 self.selected_segment = new_selection;
             }
             Panel::Settings => {
-                let field_count =
-                    if self.config.segments[self.selected_segment].id == SegmentId::Agents {
-                        8
-                    } else {
-                        7
-                    };
+                let field_count = 7;
                 let current_field = match self.selected_field {
                     FieldSelection::Enabled => 0i32,
                     FieldSelection::Icon => 1,
@@ -518,7 +492,6 @@ impl App {
                     FieldSelection::BackgroundColor => 4,
                     FieldSelection::TextStyle => 5,
                     FieldSelection::Options => 6,
-                    FieldSelection::ExperimentalMod => 7,
                 };
                 let new_field = (current_field + delta).clamp(0, field_count - 1) as usize;
                 self.selected_field = match new_field {
@@ -529,7 +502,6 @@ impl App {
                     4 => FieldSelection::BackgroundColor,
                     5 => FieldSelection::TextStyle,
                     6 => FieldSelection::Options,
-                    7 => FieldSelection::ExperimentalMod,
                     _ => FieldSelection::Enabled,
                 };
             }
@@ -538,75 +510,13 @@ impl App {
 
     fn toggle_current(&mut self) {
         match self.selected_panel {
-            Panel::SegmentList => {
-                // Toggle segment enabled/disabled in segment list
-                if let Some(segment) = self.config.segments.get_mut(self.selected_segment) {
-                    segment.enabled = !segment.enabled;
-                    let segment_name = match segment.id {
-                        SegmentId::Model => "Model",
-                        SegmentId::Effort => "Effort",
-                        SegmentId::Agents => "Agents",
-                        SegmentId::Directory => "Directory",
-                        SegmentId::Git => "Git",
-                        SegmentId::ContextWindow => "Context Window",
-                        SegmentId::Usage => "Usage",
-                        SegmentId::Cost => "Cost",
-                        SegmentId::Session => "Session",
-                        SegmentId::OutputStyle => "Output Style",
-                        SegmentId::Update => "Update",
-                    };
-                    let is_enabled = segment.enabled;
-                    self.status_message = Some(format!(
-                        "{} segment {}",
-                        segment_name,
-                        if is_enabled { "enabled" } else { "disabled" }
-                    ));
-                    if segment.id == SegmentId::Agents {
-                        self.status_message = Some(format!(
-                            "Agents {}. Press S to {} hooks.",
-                            if is_enabled { "enabled" } else { "disabled" },
-                            if is_enabled { "install" } else { "uninstall" }
-                        ));
-                    }
-                    self.preview.update_preview(&self.config);
-                }
-            }
+            // Toggle segment enabled/disabled in segment list
+            Panel::SegmentList => self.toggle_selected_segment(),
             Panel::Settings => {
                 // Edit field in settings panel
                 match self.selected_field {
-                    FieldSelection::Enabled => {
-                        // Toggle enabled state in settings panel too
-                        if let Some(segment) = self.config.segments.get_mut(self.selected_segment) {
-                            segment.enabled = !segment.enabled;
-                            let segment_name = match segment.id {
-                                SegmentId::Model => "Model",
-                                SegmentId::Effort => "Effort",
-                                SegmentId::Agents => "Agents",
-                                SegmentId::Directory => "Directory",
-                                SegmentId::Git => "Git",
-                                SegmentId::ContextWindow => "Context Window",
-                                SegmentId::Usage => "Usage",
-                                SegmentId::Cost => "Cost",
-                                SegmentId::Session => "Session",
-                                SegmentId::OutputStyle => "Output Style",
-                                SegmentId::Update => "Update",
-                            };
-                            let is_enabled = segment.enabled;
-                            self.status_message = Some(format!(
-                                "{} segment {}",
-                                segment_name,
-                                if is_enabled { "enabled" } else { "disabled" }
-                            ));
-                            if segment.id == SegmentId::Agents {
-                                self.status_message = Some(format!(
-                                    "Agents {}. Press S to {} hooks.",
-                                    if is_enabled { "enabled" } else { "disabled" },
-                                    if is_enabled { "install" } else { "uninstall" }
-                                ));
-                            }
-                            self.preview.update_preview(&self.config);
-                        }
-                    }
+                    // Toggle enabled state in settings panel too
+                    FieldSelection::Enabled => self.toggle_selected_segment(),
                     FieldSelection::Icon => self.open_icon_selector(),
                     FieldSelection::IconColor
                     | FieldSelection::TextColor
@@ -626,58 +536,50 @@ impl App {
                             self.preview.update_preview(&self.config);
                         }
                     }
-                    FieldSelection::ExperimentalMod => {
-                        let segment = &mut self.config.segments[self.selected_segment];
-                        match crate::core::segments::AgentsSegment::experimental_mod(
-                            &segment.options,
-                        ) {
-                            Ok(enabled) => {
-                                segment
-                                    .options
-                                    .insert("experimental_mod".into(), serde_json::json!(!enabled));
-                                self.status_message = Some(format!(
-                                    "Experimental Mod {}. Press S to detect and apply.",
-                                    if enabled { "off" } else { "on" }
-                                ));
-                            }
-                            Err(error) => self.status_message = Some(error.to_string()),
-                        }
-                    }
                     FieldSelection::Options => {
-                        let segment = &self.config.segments[self.selected_segment];
-                        if segment.id == SegmentId::Agents {
-                            match crate::core::segments::AgentsSegment::max_agents(&segment.options)
-                            {
-                                Ok(value) => self.max_agents_input.open(value),
-                                Err(error) => self.status_message = Some(error.to_string()),
-                            }
-                        } else {
-                            self.status_message =
-                                Some("Options editor not implemented yet".to_string());
-                        }
+                        self.status_message =
+                            Some("Options editor not implemented yet".to_string());
                     }
                 }
             }
         }
     }
 
-    fn apply_max_agents(&mut self) {
-        if let Some(value) = self.max_agents_input.value() {
-            self.config.segments[self.selected_segment]
-                .options
-                .insert("max_agents".into(), serde_json::json!(value));
-            self.max_agents_input.is_open = false;
-            self.preview.update_preview(&self.config);
-            self.status_message = Some(format!("Max agents: {value}. Press S to save."));
-        }
+    fn toggle_selected_segment(&mut self) {
+        let Some(segment) = self.config.segments.get_mut(self.selected_segment) else {
+            return;
+        };
+        segment.enabled = !segment.enabled;
+        let state = if segment.enabled {
+            "enabled"
+        } else {
+            "disabled"
+        };
+        self.status_message = Some(if segment.id == SegmentId::Agents {
+            format!(
+                "Agents {state}. Press S to {} the subagent panel.",
+                if segment.enabled { "install" } else { "remove" }
+            )
+        } else {
+            let segment_name = match segment.id {
+                SegmentId::Model => "Model",
+                SegmentId::Effort => "Effort",
+                SegmentId::Agents => "Agents",
+                SegmentId::Directory => "Directory",
+                SegmentId::Git => "Git",
+                SegmentId::ContextWindow => "Context Window",
+                SegmentId::Usage => "Usage",
+                SegmentId::Cost => "Cost",
+                SegmentId::Session => "Session",
+                SegmentId::OutputStyle => "Output Style",
+                SegmentId::Update => "Update",
+            };
+            format!("{segment_name} segment {state}")
+        });
+        self.preview.update_preview(&self.config);
     }
 
     fn switch_panel(&mut self) {
-        if self.selected_field == FieldSelection::ExperimentalMod
-            && self.config.segments[self.selected_segment].id != SegmentId::Agents
-        {
-            self.selected_field = FieldSelection::Enabled;
-        }
         self.selected_panel = match self.selected_panel {
             Panel::SegmentList => Panel::Settings,
             Panel::Settings => Panel::SegmentList,
@@ -723,42 +625,52 @@ impl App {
     }
 
     fn cycle_theme(&mut self) {
-        let themes = crate::ui::themes::ThemePresets::list_available_themes();
+        let themes = match crate::ui::themes::ThemePresets::list_available_themes() {
+            Ok(themes) => themes,
+            Err(error) => {
+                self.status_message = Some(format!("Cannot list themes: {error}"));
+                return;
+            }
+        };
         let current_theme = &self.config.theme;
         let current_index = themes.iter().position(|t| t == current_theme).unwrap_or(0);
         let next_index = (current_index + 1) % themes.len();
         let next_theme = &themes[next_index];
 
-        self.status_message = Some(format!("Switching to theme: {}", next_theme));
         self.switch_to_theme(next_theme);
     }
 
     fn switch_to_theme(&mut self, theme_name: &str) {
-        self.config =
-            Self::with_optional_segments(crate::ui::themes::ThemePresets::get_theme(theme_name));
-        self.selected_segment = 0;
-        self.selected_field = FieldSelection::Enabled;
-        self.preview.update_preview(&self.config);
-        self.status_message = Some(format!("Switched to {} theme", theme_name));
+        self.apply_theme(theme_name, format!("Switched to {theme_name} theme"));
     }
 
     /// Reset current theme to its default configuration
     fn reset_to_theme_defaults(&mut self) {
         let current_theme = self.config.theme.clone();
-        self.config = Self::with_optional_segments(crate::ui::themes::ThemePresets::get_theme(
+        self.apply_theme(
             &current_theme,
-        ));
-        self.selected_segment = 0;
-        self.selected_field = FieldSelection::Enabled;
-        self.preview.update_preview(&self.config);
-        self.status_message = Some(format!("Reset {} theme to defaults", current_theme));
+            format!("Reset {current_theme} theme to defaults"),
+        );
+    }
+
+    /// Replace the edited configuration with a theme; a theme that fails to load keeps it.
+    fn apply_theme(&mut self, theme_name: &str, done: String) {
+        match crate::ui::themes::ThemePresets::get_theme(theme_name) {
+            Ok(theme) => {
+                self.config = Self::with_optional_segments(theme);
+                self.selected_segment = 0;
+                self.selected_field = FieldSelection::Enabled;
+                self.preview.update_preview(&self.config);
+                self.status_message = Some(done);
+            }
+            Err(error) => {
+                self.status_message = Some(format!("Cannot load theme {theme_name}: {error}"))
+            }
+        }
     }
 
     fn save_config(&mut self) -> Result<String, Box<dyn std::error::Error>> {
-        let message = crate::agents::integration::configure(
-            self.config.agents_enabled(),
-            self.config.agents_experimental_mod()?,
-        )?;
+        let message = crate::agents::integration::configure(self.config.agents_enabled())?;
         self.config.save()?;
         Ok(message)
     }
@@ -842,84 +754,7 @@ mod tests {
     }
 
     #[test]
-    fn experimental_mod_is_an_opt_in_agents_setting_saved_in_config() {
-        let mut app = App::new(ThemePresets::get_default());
-        app.selected_segment = app
-            .config
-            .segments
-            .iter()
-            .position(|s| s.id == SegmentId::Agents)
-            .unwrap();
-        app.toggle_current();
-        assert!(!app.config.agents_experimental_mod().unwrap());
-        app.switch_panel();
-        app.move_selection(7);
-        assert_eq!(app.selected_field, FieldSelection::ExperimentalMod);
-        assert!(screen(&mut app, 80, 24).contains("Experimental Mod: Off"));
-        app.toggle_current();
-        assert!(app.config.agents_experimental_mod().unwrap());
-        assert!(screen(&mut app, 80, 24).contains("Experimental Mod: On"));
-        let saved = toml::to_string_pretty(&app.config).unwrap();
-        let mut reopened = App::new(toml::from_str(&saved).unwrap());
-        assert!(reopened.config.agents_experimental_mod().unwrap());
-        reopened.selected_panel = Panel::Settings;
-        reopened.selected_field = FieldSelection::ExperimentalMod;
-        reopened.switch_to_theme("minimal");
-        assert_eq!(reopened.selected_field, FieldSelection::Enabled);
-        assert!(!reopened.config.agents_experimental_mod().unwrap());
-    }
-
-    #[test]
-    fn max_agents_editor_validates_applies_and_round_trips_through_config() {
-        let mut app = App::new(ThemePresets::get_default());
-        app.selected_segment = app
-            .config
-            .segments
-            .iter()
-            .position(|s| s.id == SegmentId::Agents)
-            .unwrap();
-        app.toggle_current();
-        app.switch_panel();
-        app.move_selection(6);
-        assert_eq!(app.selected_field, FieldSelection::Options);
-        assert!(screen(&mut app, 80, 24).contains("Max agents: 3"));
-        app.toggle_current();
-        assert!(app.max_agents_input.is_open);
-        for invalid in ["", "-1", "1.5", "many", "999999999999999999999999999"] {
-            app.max_agents_input.input = invalid.into();
-            app.apply_max_agents();
-            assert!(app.max_agents_input.is_open);
-            assert!(app.max_agents_input.error.is_some());
-            assert_eq!(
-                app.config.segments[app.selected_segment].options["max_agents"],
-                3
-            );
-        }
-        for value in [0, 1, 5] {
-            app.max_agents_input.input = value.to_string();
-            app.apply_max_agents();
-            assert!(!app.max_agents_input.is_open);
-            let config: Config =
-                toml::from_str(&toml::to_string_pretty(&app.config).unwrap()).unwrap();
-            assert_eq!(
-                config.segments[app.selected_segment].options["max_agents"],
-                value
-            );
-            assert!(screen(&mut app, 120, 40).contains(&format!("Max agents: {value}")));
-            app.toggle_current();
-            assert_eq!(app.max_agents_input.input, value.to_string());
-        }
-        // Dismissing the popup leaves the last applied value unchanged.
-        app.max_agents_input.input = "20".into();
-        app.max_agents_input.is_open = false;
-        assert_eq!(
-            app.config.segments[app.selected_segment].options["max_agents"],
-            5
-        );
-    }
-
-    #[test]
-    fn agents_is_opt_in_and_both_tui_panels_toggle_and_preview_it() {
+    fn agents_is_opt_in_and_both_tui_panels_toggle_it_without_a_status_line_preview() {
         let mut config = ThemePresets::get_default();
         config
             .segments
@@ -938,14 +773,16 @@ mod tests {
         let mut unchanged = app.config.clone();
         unchanged.segments.retain(|s| s.id != SegmentId::Agents);
         assert_eq!(serde_json::to_value(&unchanged).unwrap(), original);
+        let before = app.preview.get_preview_cache().to_string();
         app.toggle_current();
         assert!(app.config.agents_enabled());
-        assert!(app.preview.get_preview_cache().contains("Agents: 4 active"));
+        // Agents appear in Claude Code's subagent panel, never on the main status line.
+        assert_eq!(app.preview.get_preview_cache(), before);
         assert!(app
             .status_message
             .as_ref()
             .unwrap()
-            .contains("install hooks"));
+            .contains("install the subagent panel"));
         let saved = toml::to_string_pretty(&app.config).unwrap();
         let mut reopened = App::new(toml::from_str(&saved).unwrap());
         assert!(reopened.config.agents_enabled());
@@ -953,12 +790,11 @@ mod tests {
         reopened.switch_panel();
         reopened.toggle_current();
         assert!(!reopened.config.agents_enabled());
-        assert!(!reopened.preview.get_preview_cache().contains("Agents:"));
         assert!(reopened
             .status_message
             .as_ref()
             .unwrap()
-            .contains("uninstall hooks"));
+            .contains("remove the subagent panel"));
     }
 
     #[test]
@@ -983,7 +819,7 @@ mod tests {
             app.config.segments[app.selected_segment].colors.text,
             Some(AnsiColor::Color16 { c16: 3 })
         );
-        assert!(screen(&mut app, 120, 40).contains("Agents: 4 active"));
+        assert!(screen(&mut app, 120, 40).contains("Agents"));
         app.switch_to_theme("minimal");
         assert!(!app.config.agents_enabled());
         assert!(app
@@ -996,7 +832,7 @@ mod tests {
     }
 
     #[test]
-    fn agent_preview_is_visible_at_standard_terminal_height() {
+    fn agents_toggle_message_is_visible_at_standard_terminal_height() {
         let mut config = ThemePresets::get_default();
         for segment in &mut config.segments {
             segment.enabled = !matches!(segment.id, SegmentId::Agents | SegmentId::Usage);
@@ -1010,8 +846,7 @@ mod tests {
             .unwrap();
         app.toggle_current();
         let rendered = screen(&mut app, 80, 24);
-        assert!(rendered.contains("Agents: 4 active"));
-        assert!(rendered.contains("install hooks"));
+        assert!(rendered.contains("subagent panel"), "{rendered}");
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README.zh.md)
 
-基于 Rust 的高性能 Claude Code 状态栏工具，集成 Git 信息、使用量跟踪、交互式 TUI 配置和 Claude Code 补丁工具。
+基于 Rust 的高性能 Claude Code 状态栏工具，集成 Git 信息、上下文与用量显示、Claude Code 子代理面板行渲染和交互式 TUI 配置。
 
 ![Language:Rust](https://img.shields.io/static/v1?label=Language&message=Rust&color=orange&style=flat-square)
 ![License:MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=blue&style=flat-square)
@@ -19,7 +19,7 @@
 - **Git 集成** 显示分支、状态和跟踪信息
 - **模型显示** 简化的 Claude 模型名称
 - **思考强度显示** 显示当前推理工作量档位，支持独立开关
-- **使用量跟踪** 基于转录文件分析  
+- **上下文与用量显示** 直接读取 Claude Code 状态栏输入
 - **目录显示** 显示当前工作空间
 - **简洁设计** 使用 Nerd Font 图标
 
@@ -29,12 +29,6 @@
 - **主题系统** 多种内置预设主题
 - **段落自定义** 精细化控制各段落
 - **配置管理** 初始化、检查、编辑配置
-
-### Claude Code 增强
-- **禁用上下文警告** 移除烦人的"Context low"消息
-- **启用详细模式** 增强输出详细信息
-- **稳定补丁器** 适应 Claude Code 版本更新
-- **自动备份** 安全修改，支持轻松恢复
 
 ## 安装
 
@@ -133,168 +127,42 @@ ccline --theme gruvbox
 ccline --theme nord
 ccline --theme powerline-dark
 
-# 或使用 ~/.claude/ccline/themes/ 目录下的自定义主题
+# 或使用主题目录下的自定义主题（见“配置”）
 ccline --theme my-custom-theme
 ```
 
-### Claude Code 增强
+### 详细输出与已移除的补丁器
 
-```bash
-# 禁用上下文警告并启用详细模式
-ccline --patch /path/to/claude-code/cli.js
-
-# 常见安装路径示例
-ccline --patch ~/.local/share/fnm/node-versions/v24.4.1/installation/lib/node_modules/@anthropic-ai/claude-code/cli.js
-```
+旧版本提供 `ccline --patch` 修改 Claude Code 的 `cli.js`。Claude Code 现在以原生二进制分发，不再包含 `cli.js`，因此补丁器已移除。需要详细输出时，使用 Claude Code 自带的设置：执行 `/config verbose=true`，或在 `/config` 的 Config 标签页中切换 verbose 输出（[官方文档](https://code.claude.com/docs/en/settings#use-the-config-menu)）。ccline 不再隐藏 "Context low" 警告，也不再修改 Claude Code 的其他行为；目前未确认这些补丁有官方替代方式。
 
 ## 默认段落
 
 显示：`模型 | Effort | 目录 | Git 分支状态 | 上下文窗口`
 
-### Git 状态指示器
+- **Git**：分支名；`✓` 清洁，`●` 有更改，`⚠` 冲突；`↑n` 领先，`↓n` 落后
+- **模型**：简化名称，例如 `claude-sonnet-5-5` → `Sonnet 5.5`，可在 `models.toml` 中自定义
+- **Effort**：当前推理工作量档位，例如 `high`
+- **上下文窗口**：Claude Code 报告的上下文占用，例如 `20% · 200k tokens`；首次响应前及 `/compact` 刚结束时显示 `-`
 
-- 带 Nerd Font 图标的分支名
-- 状态：`✓` 清洁，`●` 有更改，`⚠` 冲突
-- 远程跟踪：`↑n` 领先，`↓n` 落后
-
-### 模型显示
-
-显示简化的 Claude 模型名称：
-- `claude-3-5-sonnet` → `Sonnet 3.5`
-- `claude-4-sonnet` → `Sonnet 4`
-
-### 上下文窗口显示
-
-基于转录文件分析的令牌使用百分比，包含上下文限制跟踪。
-
-### 思考强度显示
-
-显示 Claude Code 报告的当前推理工作量档位，例如 `low`、`medium`、`high`、`xhigh` 或 `max`。要求 Claude Code 2.1.119 或更新版本；输入没有 `effort` 字段时省略该段落。所有内置主题默认在 Model 后启用 Effort。
+可选段落包括 **Usage**（订阅窗口和网关预算，例如 `63% · 24% · 2h`）、Session、Cost、Output Style 和 Update。各段落的数据来源、格式和选项见[段落说明](docs/segments.zh.md)。如需在会话空闲时让 Usage 倒计时保持更新，请自行在 `statusLine` 中设置 `refreshInterval`；ccline 不管理该设置。
 
 ## 配置
 
-CCometixLine 支持通过 TOML 文件和交互式 TUI 进行完整配置：
+- **交互式 TUI**：`ccline --config` 实时编辑并预览
+- **文件**：`<配置目录>/ccline/config.toml`、`themes/*.toml` 和 `models.toml`
+- **初始化**：主菜单中的 **Initialize Config**（无输入直接运行 `ccline`）
 
-- **配置文件**: `~/.claude/ccline/config.toml`
-- **交互式 TUI**: `ccline --config` 实时编辑配置并预览效果
-- **主题文件**: `~/.claude/ccline/themes/*.toml` 自定义主题文件
-- **自动初始化**: `ccline --init` 创建默认配置
+`<配置目录>` 在设置了 [`CLAUDE_CONFIG_DIR`](https://code.claude.com/docs/en/env-vars) 时为该目录，否则为 `~/.claude`。渲染只读取这些文件，文件无法读取或解析时明确报错，不回退到默认值。目录规则、初始化和 `models.toml` 见[配置说明](docs/configuration.zh.md)。
 
-### 可用段落
+## 子代理面板
 
-所有段落都支持配置：
-- 启用/禁用切换
-- 自定义分隔符和图标
-- 颜色自定义
-- 格式选项
-
-支持的段落：目录、Git、模型、Effort、Agents、上下文窗口、使用量、会话、成本、输出样式、更新
-
-### 使用量配置
-
-Usage 默认关闭。运行 `ccline --config`，选中 **Usage**，按 **Enter** 开启，再按 **S** 保存。数据直接取自 [Claude Code 状态栏输入](https://code.claude.com/docs/en/statusline#available-data)中的 `rate_limits`，要求 Claude Code 2.1.80 或更新版本。文字依次显示周已用百分比、5 小时已用百分比和 5 小时重置倒计时，例如 `63% · 24% · 2h`；前面的饼图表示 7 天用量。缺失值和已过期的重置时间显示为 `?`，两个窗口均缺失时隐藏该段落。Usage 没有专属配置选项，不发起 API 请求，也不读取凭据或缓存。
-
-### Effort 配置
-
-运行 `ccline --config`，在段落列表中选中 **Effort**，按 **Enter** 独立切换显示状态，不影响 Model。按 **Tab** 编辑图标、颜色、背景和文字样式，按 **Shift+上/下方向键** 调整顺序，按 **S** 保存到 `config.toml`。预览随编辑实时更新。**W** 将配置写入当前主题文件，用于通过 `--theme` 指定主题的情况。
-
-如果当前配置或选中的主题没有 Effort，TUI 会在 Model 后显示一个未启用的 Effort 选项；没有 Model 时放在列表末尾。Effort 使用闪电图标和对应内置主题的独立紫色系配色；自定义主题使用默认 Effort 样式。按 **Enter** 启用，再按 **S** 保存配置或 **W** 写入当前主题即可。新增的 Effort 选项只在保存时写入文件。也可以直接在 `config.toml` 或主题文件中配置：
-
-```toml
-[[segments]]
-id = "effort"
-enabled = true
-icon = { plain = "⚡", nerd_font = "\uf0e7" }
-colors = { icon = { c16 = 13 }, text = { c16 = 13 } }
-styles = { text_bold = false }
-options = {}
-```
-
-设置 `enabled = false` 即可隐藏 Effort。显示值直接来自状态栏输入的 `effort.level`，不会根据模型名、思考开关或 token 用量推断。
-
-### 子 agent 运行状态
-
-**所有内置主题默认关闭 Agents。** 运行 `ccline --config`，选中 **Agents**，按 **Enter** 开启，再按 **S** 保存。保存时通过 PATH 中的 `claude --version` 检测版本，决定 agent 的显示位置：
-
-- Claude Code **2.1.293 或更新版本**：由 Claude Code 自带的、位于输入框下方的子代理面板列出 agent，ccline 负责渲染面板的每一行，详见[子代理面板](#子代理面板)。主状态栏保留其他段落，不显示 Agents 段落，也不安装生命周期 hooks。
-- 更旧的版本，或 PATH 中找不到 `claude`：主状态栏显示本节其余部分描述的 Agents 段落，数据来自生命周期命令 hooks 或[实验性 Agents Mod](#实验性-agents-mod)。
-
-版本检测在保存时执行，更换 Claude Code 版本后需重新保存。版本输出无效或 `claude --version` 执行失败时会明确报错。保存后重启 Claude Code 生效。
-
-hooks 后端在保存时会在 `~/.claude/settings.json` 安装 `SessionStart`、`SubagentStart`、`SubagentStop` 和 `SessionEnd` 命令 hooks。启用后重启 Claude Code，由 `SessionStart` 初始化活动记录。没有配置状态栏时会同时配置 ccline；已有状态栏命令保持不变。未设置 `refreshInterval` 时会添加两秒刷新，使主会话空闲时也能更新后台活动。
-
-关闭 **Agents** 并按 **S** 保存即可卸载对应 hooks 或面板命令，保留其他 hooks 和设置。本功能添加的刷新间隔若未被修改，会在卸载时移除；原有或后来手动修改的间隔保持不变。未保存的切换只影响预览。**W** 和 **Ctrl+S** 只保存主题文件，不改变 hooks 安装状态；**S** 才会应用活动开关。配置或主题没有 Agents 条目时，TUI 会将其作为默认关闭的选项显示。
-
-低于 Claude Code 2.1.293 时，观察到活跃子 agent 后，主状态栏显示例如 `Agents: 4 active · 1 responded · reviewer 1m20s · Explore 35s · Plan 12s · +1 more`。活跃 agent 按运行时长从长到短排列，`max_agents` 是显示名称数量的上限，默认 `3`。每次刷新会根据终端列宽，在保留其他段落、图标、分隔符和数量摘要的前提下，从末尾收起放不下的完整“名称 + 耗时”，并更新 `+N more`。没有名称能放下或 `max_agents = 0` 时只显示数量；没有活跃子 agent 时整个段落及其分隔符隐藏。若其余段落和数量摘要本身已经超宽，收起名称无法避免宿主裁剪。
-
-在 TUI 中选中 **Agents**，按 **Tab** 进入设置，选中 **Max agents** 并按 **Enter** 输入非负整数；**Ctrl+U** 清空输入，**Enter** 应用，**Esc** 取消，**S** 保存到 `config.toml`。无效输入会显示错误并保留编辑框。颜色、图标、背景、文字样式和排序仍使用原有控件；预览使用示例活动，按预览区域的实际宽度收起名称。也可以直接编辑配置或主题中的 Agents 条目：
-
-```toml
-[[segments]]
-id = "agents"
-enabled = true
-icon = { plain = "A", nerd_font = "\uf0c0" }
-colors = { icon = { c16 = 6 }, text = { c16 = 6 } }
-styles = { text_bold = false }
-options = { max_agents = 3, experimental_mod = false }
-```
-
-自动布局读取 Claude Code 每次调用时设置的 [`COLUMNS`](https://code.claude.com/docs/en/statusline#how-status-lines-work)，按终端显示列计算中文、组合字符和 emoji，ANSI 颜色不占列宽。默认扣除 Claude Code 左右各两列留白；设置了 `statusLine.padding` 时，将状态栏命令设为 `ccline --width-offset N`，其中 `N = 4 + 2 × padding`，例如 `padding = 2` 对应 `--width-offset 8`。有活跃名称需要布局时，缺失或无效的 `COLUMNS` 会明确报错；手动运行时需显式提供列数。窗口尺寸变化在下次调用时生效。
-
-记录按宿主的 `CLAUDE_PID` 归集，再按会话 ID 和 agent ID 隔离，并通过文件锁处理并发事件。重复启动事件不会增加计数；恢复子 agent 时重新计时；压缩上下文保留活动记录，启动或恢复会话则重置该会话的观察记录。hook 命令为 `ccline --agents-hook`，事件数据通过 stdin 读取。默认 hooks 后端将每个进程的活动记录保存在 `~/.claude/ccline/agents/<CLAUDE_PID>.json`，并使用同名 `.lock` 文件。`/clear` 删除当前会话记录；Claude Code 正常退出时删除这两个文件，包括通过 `/resume` 切换前的会话记录。普通回复结束和子 agent 停止时保留记录，清理不影响其他 Claude Code 进程。hooks 和状态栏调用均依赖宿主提供的 `CLAUDE_PID`。`~/.claude/ccline/agents-installation.json` 保存本功能管理的 hook 命令和刷新间隔信息，用于卸载。
-
-汇总依据[官方生命周期 hooks](https://code.claude.com/docs/en/hooks#subagentstart)。`responded` 表示收到 `SubagentStop`，不代表任务成功。这些事件无法可靠区分等待授权、失败、取消或其他 stop hook 要求继续运行的状态，因此使用可配置的活跃颜色，不推断这些细分状态。没有结束事件的异常中断无法从这份数据确认；强制终止或崩溃未触发 `SessionEnd` 时无法执行文件清理。安装前已在运行的 agent 不会通过扫描转录文件重建。状态或设置文件损坏时会明确报错。
-
-### 子代理面板
-
-在 Claude Code 2.1.293 或更新版本上，保存时会把 `~/.claude/settings.json` 中的 `subagentStatusLine` 设为命令 `ccline --subagent-statusline`。Claude Code 每次刷新面板时运行该命令，通过 stdin 传入当前可见的行，ccline 将每一行替换为类似下面的内容：
+在 `ccline --config` 中启用 **Agents** 并按 **S**，ccline 会把 `ccline --subagent-statusline` 安装为 Claude Code 的 [`subagentStatusLine`](https://code.claude.com/docs/en/statusline#subagent-status-lines)，并渲染提示符下方子代理面板的每一行：
 
 ```text
-Explore · 查找配置加载逻辑 · 1m20s · 12.4k (6%) · Sonnet 5.5 · high
+Explore · find config loading · 1m20s · 12.4k (6%) · Sonnet 5.5 · high
 ```
 
-各字段依次为：agent 类型（缺失时用 agent 名称）、任务进度标签、运行中显示已运行时长，否则显示任务状态（例如 `failed`）、子 agent 的 token 数及其占上下文窗口的比例、经 `models.toml` 解析的模型显示名，以及配置的推理 effort（数值预算显示为 `8k budget`）。输入中缺少的字段不显示。行内使用 Agents 段落的图标、图标颜色、文字颜色和粗体设置；不使用背景色和分隔符，也不添加任何标题文字。行宽超过 Claude Code 提供的 `columns` 时，ccline 依次去掉 effort、模型、token 数，最后用 `…` 截短标签。
-
-面板中有哪些行由 Claude Code 决定：子 agent 成功结束后其行立即消失，失败或被停止的行保留 30 秒，面板只列出有限的行数（[官方文档](https://code.claude.com/docs/en/sub-agents#run-subagents-in-foreground-or-background)）。因此该模式下没有 `responded` 计数，`max_agents` 和主状态栏的列宽适配也不适用。`agentType` 字段从 2.1.293 开始提供，因此以该版本为门槛。配置中 Agents 段落关闭或不存在时，命令不输出任何内容，Claude Code 保持默认行。面板输入格式错误时会明确报错。
-
-若 `subagentStatusLine` 已有并非 ccline 写入的值（包括用户后来修改过的 ccline 原值），ccline 会保留该值，改为安装 hooks 后端，并在 TUI 中提示。切换到 hooks 或关闭 Agents 时，仅在面板命令未被修改的情况下移除它。面板不需要状态栏定时刷新，因此该模式不添加 `refreshInterval`，并在未被修改时移除之前由 ccline 添加的刷新间隔。Claude Code 对 `subagentStatusLine` 适用与状态栏相同的工作区信任、`disableAllHooks` 和 `allowManagedHooksOnly` 规则（[官方文档](https://code.claude.com/docs/en/statusline#subagent-status-lines)）。安装清单会记录面板命令，用于卸载。
-
-### 实验性 Agents Mod
-
-**Experimental Mod 默认关闭。** 在 Agents 设置面板中选中 **Experimental Mod**，按 **Enter** 切换，再按 **S** 保存；配置文件对应 Agents 条目 `options` 中的 `experimental_mod = true`。保存时通过 PATH 中的 `claude --version` 检测版本：Claude Code **2.1.273 至 2.1.292** 选择 Mod；**2.1.293 或更新版本**改用[子代理面板](#子代理面板)，TUI 会提示 Mod 仅适用于 2.1.293 以下版本；版本较旧或找不到 CLI 时使用原有 hooks 后端，TUI 会显示原因。版本检测在保存时执行，更换 Claude Code 版本后需重新保存。切换后端后重启 Claude Code 生效。
-
-Mod 模式将内嵌插件部署到 `~/.claude/skills/ccline-agents-mod/`，启用该插件，并且**仅移除 ccline 添加的四个生命周期命令 hooks**。它同时会设置宿主的 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` 实验开关；该开关在 Early Access 阶段用于启用 Function Hooks，而 Claude Code 2.1.287 在不设置该变量时也能加载 Mod，因此它只对仍需要该开关的版本有意义。其他 hooks 保留，Mod 通过 `next` 继续执行它们。关闭实验模式会恢复命令 hooks。关闭实验模式或改用子代理面板时，会恢复由本工具修改且未被用户再次修改的宿主设置。部署的插件在没有显式启用设置时默认关闭。在仍需该开关的版本上，开启宿主实验开关也会允许其他已启用插件的 Function Hooks 运行。
-
-Mod 在进程内接收同样的生命周期事件，通过 `CCLINE_AGENTS_SNAPSHOT` 将活动快照传给状态栏子进程，省去每次事件启动 ccline 命令进程，以及活动文件的读写和锁操作。显示仍使用现有 Rust 渲染器、耗时计算、`max_agents`、列宽适配和刷新间隔。Mod 状态保存在内存中，不重建插件加载前或重新加载期间错过的事件。`CCLINE_AGENTS_SNAPSHOT` 缺失、无效或不含当前会话时，仅隐藏 Agents 段落，其他状态照常显示，程序正常退出；Mod 模式不读取旧 hook 记录。该 API 处于 Early Access；源码依据和验证范围见[组件文档](mods/agents/README.md)。
-
-### 模型配置 (`models.toml`)
-
-文件位置：`~/.claude/ccline/models.toml`（首次运行时自动创建）
-
-此文件配置模型 ID 的显示名称及其上下文窗口限制。Claude 模型（Sonnet、Opus、Haiku）会自动识别并提取版本号，此文件仅用于覆盖默认行为或添加第三方模型支持。
-
-```toml
-# 模型条目：基于模型 ID 的子字符串匹配
-# 优先级高于内置 Claude 模型识别
-[[models]]
-pattern = "glm-4.5"
-display_name = "GLM-4.5"
-context_limit = 128000
-
-[[models]]
-pattern = "kimi-k2"
-display_name = "Kimi K2"
-context_limit = 128000
-
-# 上下文修饰符：独立匹配，可与模型条目组合使用
-# 覆盖 context_limit 并将 display_suffix 追加到显示名称
-# 例如：模型 "Opus 4" + 修饰符 " 1M" = "Opus 4 1M"
-[[context_modifiers]]
-pattern = "[1m]"
-display_suffix = " 1M"
-context_limit = 1000000
-```
-
+已有且不是 ccline 写入的 `subagentStatusLine` 会被报告为配置冲突并保持不变。行字段、宽度处理、所有权规则以及从已移除的 Hooks 和 Mod 后端迁移，见[子代理面板](docs/subagent-panel.zh.md)。
 
 ## 系统要求
 
@@ -328,7 +196,6 @@ cargo build --release
 - [x] TUI 配置界面
 - [x] 自定义主题
 - [x] 交互式主菜单
-- [x] Claude Code 增强工具
 
 ## 贡献
 

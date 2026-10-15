@@ -22,7 +22,6 @@ pub enum FieldSelection {
     BackgroundColor,
     TextStyle,
     Options,
-    ExperimentalMod,
 }
 
 #[derive(Default)]

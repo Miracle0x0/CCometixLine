@@ -1,16 +1,6 @@
 use crate::config::{AnsiColor, Config, SegmentConfig, StyleMode};
-use crate::core::segments::{SegmentContent, SegmentData};
+use crate::core::segments::SegmentData;
 use unicode_width::UnicodeWidthStr;
-
-pub fn available_width(columns: &str, offset: usize) -> Result<usize, Box<dyn std::error::Error>> {
-    let columns: usize = columns
-        .parse()
-        .map_err(|_| format!("COLUMNS must be a positive integer, not {columns:?}"))?;
-    if columns == 0 {
-        return Err("COLUMNS must be a positive integer".into());
-    }
-    Ok(columns.saturating_sub(offset))
-}
 
 /// Measure terminal cells, excluding CSI formatting and OSC hyperlinks.
 pub(crate) fn visible_width(text: &str) -> usize {
@@ -31,55 +21,26 @@ impl StatusLineGenerator {
         Self { config }
     }
 
-    pub fn generate(&self, segments: Vec<(SegmentConfig, SegmentContent)>) -> String {
-        self.generate_with_width(segments, None)
-    }
-
-    /// Fit complete agent entries into the space left by every other segment.
-    pub fn generate_with_width(
-        &self,
-        segments: Vec<(SegmentConfig, SegmentContent)>,
-        width: Option<usize>,
-    ) -> String {
+    pub fn generate(&self, segments: Vec<(SegmentConfig, SegmentData)>) -> String {
         let enabled: Vec<_> = segments
             .into_iter()
             .filter(|(config, _)| config.enabled)
             .collect();
-        let output = self.render_segments(&enabled, width);
+        let output = self.render_segments(&enabled);
         self.join_segments(&output, &enabled)
     }
 
-    fn render_segments(
-        &self,
-        segments: &[(SegmentConfig, SegmentContent)],
-        width: Option<usize>,
-    ) -> Vec<String> {
-        let mut output: Vec<_> = segments
+    fn render_segments(&self, segments: &[(SegmentConfig, SegmentData)]) -> Vec<String> {
+        segments
             .iter()
-            .map(|(config, content)| self.render_content(config, content, None))
-            .collect();
-        if let Some(width) = width {
-            for (index, (config, content)) in segments.iter().enumerate() {
-                let SegmentContent::Agents(agents) = content else {
-                    continue;
-                };
-                let maximum = agents.max_agents.min(agents.active.len());
-                // Each candidate includes its own +N suffix, icons, spacing and separators.
-                for count in (0..=maximum).rev() {
-                    output[index] = self.render_content(config, content, Some(count));
-                    if visible_width(&self.join_segments(&output, segments)) <= width {
-                        return output;
-                    }
-                }
-            }
-        }
-        output
+            .map(|(config, data)| self.render_segment(config, data))
+            .collect()
     }
 
     fn join_segments(
         &self,
         output: &[String],
-        segments: &[(SegmentConfig, SegmentContent)],
+        segments: &[(SegmentConfig, SegmentData)],
     ) -> String {
         // Handle Powerline arrow separators with color transition
         if self.config.style.separator == "\u{e0b0}" {
@@ -94,7 +55,7 @@ impl StatusLineGenerator {
     /// This method handles ANSI escape sequences properly for ratatui rendering
     pub fn generate_for_tui(
         &self,
-        segments: Vec<(SegmentConfig, SegmentContent)>,
+        segments: Vec<(SegmentConfig, SegmentData)>,
     ) -> ratatui::text::Line<'static> {
         use ansi_to_tui::IntoText;
         use ratatui::text::{Line, Span};
@@ -115,7 +76,7 @@ impl StatusLineGenerator {
     /// Generate TUI-optimized text with intelligent wrapping by segment for preview
     pub fn generate_for_tui_preview(
         &self,
-        segments: Vec<(SegmentConfig, SegmentContent)>,
+        segments: Vec<(SegmentConfig, SegmentData)>,
         max_width: u16,
     ) -> ratatui::text::Text<'_> {
         use ansi_to_tui::IntoText;
@@ -124,7 +85,7 @@ impl StatusLineGenerator {
             .into_iter()
             .filter(|(config, _)| config.enabled)
             .collect();
-        let rendered_segments = self.render_segments(&enabled, Some(max_width.into()));
+        let rendered_segments = self.render_segments(&enabled);
         let segment_configs: Vec<_> = enabled.iter().map(|(config, _)| config).collect();
 
         // Pre-calculate separators between segments
@@ -217,25 +178,6 @@ impl StatusLineGenerator {
         }
 
         Text::from(tui_lines)
-    }
-
-    fn render_content(
-        &self,
-        config: &SegmentConfig,
-        content: &SegmentContent,
-        count: Option<usize>,
-    ) -> String {
-        match content {
-            SegmentContent::Text(data) => self.render_segment(config, data),
-            SegmentContent::Agents(agents) => self.render_segment(
-                config,
-                &SegmentData {
-                    primary: agents.text(count.unwrap_or(agents.max_agents)),
-                    secondary: String::new(),
-                    metadata: Default::default(),
-                },
-            ),
-        }
     }
 
     pub(crate) fn render_segment(&self, config: &SegmentConfig, data: &SegmentData) -> String {
@@ -396,7 +338,7 @@ impl StatusLineGenerator {
     fn join_with_powerline_arrows(
         &self,
         rendered_segments: &[String],
-        segment_configs: &[(SegmentConfig, SegmentContent)],
+        segment_configs: &[(SegmentConfig, SegmentData)],
     ) -> String {
         if rendered_segments.is_empty() {
             return String::new();
@@ -480,8 +422,10 @@ impl StatusLineGenerator {
 
 pub fn collect_all_segments(
     config: &Config,
+    models: &crate::config::ModelConfig,
     input: &crate::config::InputData,
-) -> Result<Vec<(SegmentConfig, SegmentContent)>, Box<dyn std::error::Error>> {
+) -> Result<Vec<(SegmentConfig, SegmentData)>, Box<dyn std::error::Error>> {
+    use crate::config::SegmentId;
     use crate::core::segments::*;
 
     let mut results = Vec::new();
@@ -493,53 +437,26 @@ pub fn collect_all_segments(
         }
 
         let segment_data = match segment_config.id {
-            crate::config::SegmentId::Agents => {
-                AgentsSegment::collect(input, &segment_config.options)?.map(SegmentContent::Agents)
-            }
-            crate::config::SegmentId::Model => {
-                let segment = ModelSegment::new();
-                segment.collect(input).map(SegmentContent::Text)
-            }
-            crate::config::SegmentId::Effort => {
-                let segment = EffortSegment::new();
-                segment.collect(input).map(SegmentContent::Text)
-            }
-            crate::config::SegmentId::Directory => {
-                let segment = DirectorySegment::new();
-                segment.collect(input).map(SegmentContent::Text)
-            }
-            crate::config::SegmentId::Git => {
+            // Claude Code's subagent panel shows the agents; the main status line has no row.
+            SegmentId::Agents => None,
+            SegmentId::Model => ModelSegment::new(models).collect(input),
+            SegmentId::Effort => EffortSegment::new().collect(input),
+            SegmentId::Directory => DirectorySegment::new().collect(input),
+            SegmentId::Git => {
                 let show_sha = segment_config
                     .options
                     .get("show_sha")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                let segment = GitSegment::new().with_sha(show_sha);
-                segment.collect(input).map(SegmentContent::Text)
+                GitSegment::new().with_sha(show_sha).collect(input)
             }
-            crate::config::SegmentId::ContextWindow => {
-                let segment = ContextWindowSegment::new();
-                segment.collect(input).map(SegmentContent::Text)
-            }
-            crate::config::SegmentId::Usage => {
-                let segment = UsageSegment::new();
-                segment.collect(input).map(SegmentContent::Text)
-            }
-            crate::config::SegmentId::Cost => {
-                let segment = CostSegment::new();
-                segment.collect(input).map(SegmentContent::Text)
-            }
-            crate::config::SegmentId::Session => {
-                let segment = SessionSegment::new();
-                segment.collect(input).map(SegmentContent::Text)
-            }
-            crate::config::SegmentId::OutputStyle => {
-                let segment = OutputStyleSegment::new();
-                segment.collect(input).map(SegmentContent::Text)
-            }
-            crate::config::SegmentId::Update => {
-                let segment = UpdateSegment::new();
-                segment.collect(input).map(SegmentContent::Text)
+            SegmentId::ContextWindow => ContextWindowSegment::new().collect(input),
+            SegmentId::Usage => UsageSegment::new().collect(input),
+            SegmentId::Cost => CostSegment::new().collect(input),
+            SegmentId::Session => SessionSegment::new().collect(input),
+            SegmentId::OutputStyle => OutputStyleSegment::new().collect(input),
+            SegmentId::Update => {
+                UpdateSegment::new(crate::config::paths::update_state_path()?).collect(input)
             }
         };
 
@@ -554,107 +471,6 @@ pub fn collect_all_segments(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::SegmentId;
-    use crate::core::segments::agents::{ActiveAgent, AgentSummary};
-    use crate::ui::themes::ThemePresets;
-    use ansi_to_tui::IntoText;
-
-    fn activity(total: usize, maximum: usize) -> SegmentContent {
-        SegmentContent::Agents(AgentSummary {
-            active: (0..total)
-                .map(|i| ActiveAgent {
-                    name: format!("审查员{i}👩‍💻"),
-                    elapsed: 80 - i as u64,
-                })
-                .collect(),
-            responded: 1,
-            max_agents: maximum,
-        })
-    }
-
-    #[test]
-    fn fits_agents_at_any_position_including_styles_and_following_segments() {
-        for mut config in [
-            ThemePresets::get_default(),
-            ThemePresets::get_powerline_dark(),
-        ] {
-            for mode in [StyleMode::Plain, StyleMode::NerdFont, StyleMode::Powerline] {
-                config.style.mode = mode;
-                let mut agent_config = config
-                    .segments
-                    .iter()
-                    .find(|s| s.id == SegmentId::Agents)
-                    .unwrap()
-                    .clone();
-                agent_config.enabled = true;
-                let fixed_config = config
-                    .segments
-                    .iter()
-                    .find(|s| s.id == SegmentId::Directory)
-                    .unwrap()
-                    .clone();
-                let fixed = SegmentData {
-                    primary: "目录/e\u{301}".into(),
-                    secondary: "分支".into(),
-                    metadata: Default::default(),
-                };
-                let renderer = StatusLineGenerator::new(config.clone());
-                for position in 0..=2 {
-                    let segments = |maximum| {
-                        let mut data = vec![(fixed_config.clone(), fixed.clone().into()); 2];
-                        data.insert(position, (agent_config.clone(), activity(12, maximum)));
-                        data
-                    };
-                    let expected = renderer.generate(segments(2));
-                    let width = expected.into_text().unwrap().width();
-                    let actual = renderer.generate_with_width(segments(3), Some(width));
-                    assert_eq!(actual, expected, "mode {mode:?}, position {position}");
-                    assert!(actual.contains("+10 more"));
-                    let narrower = renderer.generate_with_width(segments(3), Some(width - 1));
-                    assert!(narrower.contains("+11 more"));
-                    assert!(!narrower.contains("审查员1"));
-                    assert!(narrower.into_text().unwrap().width() < width);
-                    assert_eq!(
-                        renderer.generate_with_width(segments(3), Some(1000)),
-                        renderer.generate(segments(3))
-                    );
-                    // Removing all names must preserve the counts and the other segments.
-                    let counts = renderer.generate(segments(0));
-                    assert_eq!(renderer.generate_with_width(segments(3), Some(1)), counts);
-                    assert!(!counts.contains("more"));
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn last_short_name_can_fit_when_the_more_suffix_would_not() {
-        let config = ThemePresets::get_default();
-        let mut segment = config
-            .segments
-            .iter()
-            .find(|s| s.id == SegmentId::Agents)
-            .unwrap()
-            .clone();
-        segment.enabled = true;
-        let summary = AgentSummary {
-            active: vec![
-                ActiveAgent {
-                    name: "A".into(),
-                    elapsed: 1
-                };
-                2
-            ],
-            responded: 0,
-            max_agents: 2,
-        };
-        assert!(summary.text(2).len() < summary.text(1).len());
-        let data = vec![(segment, SegmentContent::Agents(summary))];
-        let renderer = StatusLineGenerator::new(config);
-        let full = renderer.generate(data.clone());
-        let width = full.into_text().unwrap().width();
-        assert_eq!(renderer.generate_with_width(data, Some(width)), full);
-    }
 
     #[test]
     fn terminal_cells_exclude_formatting_and_count_unicode_width() {
@@ -670,12 +486,26 @@ mod tests {
     }
 
     #[test]
-    fn columns_reserve_host_spacing_and_reject_invalid_values() {
-        assert_eq!(available_width("120", 4).unwrap(), 116);
-        assert_eq!(available_width("120", 8).unwrap(), 112);
-        assert_eq!(available_width("2", 4).unwrap(), 0);
-        for invalid in ["", "0", "-1", "80.5", "wide"] {
-            assert!(available_width(invalid, 4).is_err());
+    fn enabled_agents_add_nothing_to_the_main_status_line() {
+        use crate::config::{ModelConfig, SegmentId};
+        use crate::ui::themes::ThemePresets;
+        let input = serde_json::from_value(crate::core::segments::test_payload()).unwrap();
+        for mut config in [
+            ThemePresets::get_default(),
+            ThemePresets::get_powerline_dark(),
+        ] {
+            config
+                .segments
+                .retain(|s| matches!(s.id, SegmentId::Agents | SegmentId::Directory));
+            let renderer = StatusLineGenerator::new(config.clone());
+            let without = renderer
+                .generate(collect_all_segments(&config, &ModelConfig::default(), &input).unwrap());
+            for segment in &mut config.segments {
+                segment.enabled = true;
+            }
+            let collected = collect_all_segments(&config, &ModelConfig::default(), &input).unwrap();
+            assert!(collected.iter().all(|(s, _)| s.id != SegmentId::Agents));
+            assert_eq!(renderer.generate(collected), without);
         }
     }
 }

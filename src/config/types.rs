@@ -124,10 +124,56 @@ pub struct RateLimitWindow {
     pub resets_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpendPeriod {
+    Daily,
+    Weekly,
+    Monthly,
+}
+
+/// A Claude apps gateway spend limit. The percentage and reset time arrive with every response;
+/// the dollar amounts and period come from a separate, less frequent request and may be absent.
+#[derive(Debug, Deserialize)]
+pub struct SpendLimit {
+    pub used_percentage: f64,
+    #[serde(with = "chrono::serde::ts_seconds")]
+    pub resets_at: chrono::DateTime<chrono::Utc>,
+    pub used_usd: Option<f64>,
+    pub limit_usd: Option<f64>,
+    pub period: Option<SpendPeriod>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RateLimits {
     pub five_hour: Option<RateLimitWindow>,
     pub seven_day: Option<RateLimitWindow>,
+    pub spend_limit: Option<SpendLimit>,
+}
+
+/// Token counts from the most recent API call.
+#[derive(Debug, Deserialize)]
+pub struct CurrentUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_creation_input_tokens: u64,
+    pub cache_read_input_tokens: u64,
+}
+
+impl CurrentUsage {
+    /// Tokens occupying the context window, by the same input-only formula as `used_percentage`.
+    pub fn context_tokens(&self) -> u64 {
+        self.input_tokens + self.cache_creation_input_tokens + self.cache_read_input_tokens
+    }
+}
+
+/// Claude Code's live context window. `used_percentage` may be null early in a session, and
+/// `current_usage` is null before the first API call and again right after `/compact`.
+#[derive(Debug, Deserialize)]
+pub struct ContextWindow {
+    pub context_window_size: u64,
+    pub used_percentage: Option<f64>,
+    pub current_usage: Option<CurrentUsage>,
 }
 
 #[derive(Deserialize)]
@@ -136,130 +182,10 @@ pub struct InputData {
     pub model: Model,
     pub effort: Option<Effort>,
     pub workspace: Workspace,
-    pub transcript_path: String,
+    pub context_window: ContextWindow,
     pub cost: Option<Cost>,
     pub output_style: Option<OutputStyle>,
     pub rate_limits: Option<RateLimits>,
-}
-
-// OpenAI-style nested token details
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-pub struct PromptTokensDetails {
-    #[serde(default)]
-    pub cached_tokens: Option<u32>,
-    #[serde(default)]
-    pub audio_tokens: Option<u32>,
-}
-
-// Raw usage data from different LLM providers (flexible parsing)
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-pub struct RawUsage {
-    // Anthropic-style input tokens
-    #[serde(default)]
-    pub input_tokens: Option<u32>,
-
-    // OpenAI-style input tokens (separate field to handle both formats)
-    #[serde(default)]
-    pub prompt_tokens: Option<u32>,
-
-    // Anthropic-style output tokens
-    #[serde(default)]
-    pub output_tokens: Option<u32>,
-
-    // OpenAI-style output tokens (separate field to handle both formats)
-    #[serde(default)]
-    pub completion_tokens: Option<u32>,
-
-    // Total tokens (some providers only provide this)
-    #[serde(default)]
-    pub total_tokens: Option<u32>,
-
-    // Anthropic-style cache fields
-    #[serde(default)]
-    pub cache_creation_input_tokens: Option<u32>,
-
-    #[serde(default)]
-    pub cache_read_input_tokens: Option<u32>,
-
-    // OpenAI-style cache fields (separate fields to handle both formats)
-    #[serde(default)]
-    pub cache_creation_prompt_tokens: Option<u32>,
-
-    #[serde(default)]
-    pub cache_read_prompt_tokens: Option<u32>,
-
-    #[serde(default)]
-    pub cached_tokens: Option<u32>,
-
-    // OpenAI-style nested details
-    #[serde(default)]
-    pub prompt_tokens_details: Option<PromptTokensDetails>,
-
-    // Completion token details (OpenAI)
-    #[serde(default)]
-    pub completion_tokens_details: Option<HashMap<String, u32>>,
-
-    // Catch unknown fields for future compatibility and debugging
-    #[serde(flatten, skip_serializing)]
-    pub extra: HashMap<String, serde_json::Value>,
-}
-
-// Normalized internal representation after processing
-#[derive(Debug, Clone, Serialize, Default, PartialEq)]
-pub struct NormalizedUsage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-    pub total_tokens: u32,
-    pub cache_creation_input_tokens: u32,
-    pub cache_read_input_tokens: u32,
-
-    // Metadata for debugging and analysis
-    pub calculation_source: String,
-    pub raw_data_available: Vec<String>,
-}
-
-impl NormalizedUsage {
-    /// Get tokens that count toward context window
-    /// This includes all tokens that consume context window space
-    /// Output tokens from this turn will become input tokens in the next turn
-    pub fn context_tokens(&self) -> u32 {
-        self.input_tokens
-            + self.cache_creation_input_tokens
-            + self.cache_read_input_tokens
-            + self.output_tokens
-    }
-
-    /// Get total tokens for cost calculation
-    /// Priority: use total_tokens if available, otherwise sum all components
-    pub fn total_for_cost(&self) -> u32 {
-        if self.total_tokens > 0 {
-            self.total_tokens
-        } else {
-            self.input_tokens
-                + self.output_tokens
-                + self.cache_creation_input_tokens
-                + self.cache_read_input_tokens
-        }
-    }
-
-    /// Get the most appropriate token count for general display
-    /// For OpenAI format: use total_tokens directly
-    /// For Anthropic format: use context_tokens (input + cache)
-    pub fn display_tokens(&self) -> u32 {
-        // For Claude/Anthropic format: prefer input-related tokens for context window display
-        let context = self.context_tokens();
-        if context > 0 {
-            return context;
-        }
-
-        // For OpenAI format: use total_tokens when no input breakdown available
-        if self.total_tokens > 0 {
-            return self.total_tokens;
-        }
-
-        // Fallback to any available tokens
-        self.input_tokens.max(self.output_tokens)
-    }
 }
 
 impl Config {
@@ -269,48 +195,29 @@ impl Config {
             .any(|segment| segment.id == SegmentId::Agents && segment.enabled)
     }
 
-    pub fn agents_experimental_mod(&self) -> crate::agents::Result<bool> {
-        match self
-            .segments
-            .iter()
-            .find(|s| s.id == SegmentId::Agents && s.enabled)
-        {
-            Some(segment) => {
-                crate::core::segments::AgentsSegment::experimental_mod(&segment.options)
-            }
-            None => Ok(false),
-        }
-    }
-
     /// Check if current config matches the specified theme preset
-    pub fn matches_theme(&self, theme_name: &str) -> bool {
-        let theme_preset = crate::ui::themes::ThemePresets::get_theme(theme_name);
+    pub fn matches_theme(&self, theme_name: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let theme_preset = crate::ui::themes::ThemePresets::get_theme(theme_name)?;
 
         // Compare style config
         if self.style.mode != theme_preset.style.mode
             || self.style.separator != theme_preset.style.separator
         {
-            return false;
+            return Ok(false);
         }
 
-        // Compare segments count and order
-        if self.segments.len() != theme_preset.segments.len() {
-            return false;
-        }
-
-        // Compare each segment config
-        for (current, preset) in self.segments.iter().zip(theme_preset.segments.iter()) {
-            if !self.segment_matches(current, preset) {
-                return false;
-            }
-        }
-
-        true
+        // Compare segments count, order and each segment config
+        Ok(self.segments.len() == theme_preset.segments.len()
+            && self
+                .segments
+                .iter()
+                .zip(theme_preset.segments.iter())
+                .all(|(current, preset)| self.segment_matches(current, preset)))
     }
 
     /// Check if current config has been modified from the selected theme
-    pub fn is_modified_from_theme(&self) -> bool {
-        !self.matches_theme(&self.theme)
+    pub fn is_modified_from_theme(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(!self.matches_theme(&self.theme)?)
     }
 
     /// Compare two segment configs for equality
@@ -356,103 +263,4 @@ impl PartialEq for AnsiColor {
             _ => false,
         }
     }
-}
-
-impl RawUsage {
-    /// Convert raw usage data to normalized format with intelligent token inference
-    pub fn normalize(self) -> NormalizedUsage {
-        let mut result = NormalizedUsage::default();
-        let mut sources = Vec::new();
-
-        // Collect available raw data fields and merge tokens with Anthropic priority
-        let mut available_fields = Vec::new();
-
-        // Merge input tokens (priority: input_tokens > prompt_tokens)
-        let input = self.input_tokens.or(self.prompt_tokens).unwrap_or(0);
-        if input > 0 {
-            available_fields.push("input_tokens".to_string());
-        }
-
-        // Merge output tokens (priority: output_tokens > completion_tokens)
-        let output = self.output_tokens.or(self.completion_tokens).unwrap_or(0);
-        if output > 0 {
-            available_fields.push("output_tokens".to_string());
-        }
-
-        let total = self.total_tokens.unwrap_or(0);
-        if total > 0 {
-            available_fields.push("total_tokens".to_string());
-        }
-
-        // Merge cache creation tokens (priority: Anthropic > OpenAI)
-        let cache_creation = self
-            .cache_creation_input_tokens
-            .or(self.cache_creation_prompt_tokens)
-            .unwrap_or(0);
-        if cache_creation > 0 {
-            available_fields.push("cache_creation".to_string());
-        }
-
-        // Merge cache read tokens (priority: Anthropic > OpenAI > nested format)
-        let cache_read = self
-            .cache_read_input_tokens
-            .or(self.cache_read_prompt_tokens)
-            .or(self.cached_tokens)
-            .or_else(|| {
-                // Fallback to OpenAI nested format
-                self.prompt_tokens_details
-                    .as_ref()
-                    .and_then(|d| d.cached_tokens)
-            })
-            .unwrap_or(0);
-        if cache_read > 0 {
-            available_fields.push("cache_read".to_string());
-        }
-
-        result.raw_data_available = available_fields;
-
-        // Use merged cache values (already calculated above with Anthropic priority)
-
-        // Token calculation logic - prioritize total_tokens for OpenAI format
-        let total_value = if total > 0 {
-            sources.push("total_tokens_direct".to_string());
-            total
-        } else if input > 0 || output > 0 || cache_read > 0 || cache_creation > 0 {
-            let calculated = input + output + cache_read + cache_creation;
-            sources.push("total_from_components".to_string());
-            calculated
-        } else {
-            0
-        };
-
-        // Assignment
-        result.input_tokens = input;
-        result.output_tokens = output;
-        result.total_tokens = total_value;
-        result.cache_creation_input_tokens = cache_creation;
-        result.cache_read_input_tokens = cache_read;
-        result.calculation_source = sources.join("+");
-
-        result
-    }
-}
-
-// Legacy alias for backward compatibility
-pub type Usage = RawUsage;
-
-#[derive(Deserialize)]
-pub struct Message {
-    pub usage: Option<Usage>,
-}
-
-#[derive(Deserialize)]
-pub struct TranscriptEntry {
-    pub r#type: Option<String>,
-    pub message: Option<Message>,
-    #[serde(rename = "leafUuid")]
-    pub leaf_uuid: Option<String>,
-    pub uuid: Option<String>,
-    #[serde(rename = "parentUuid")]
-    pub parent_uuid: Option<String>,
-    pub summary: Option<String>,
 }

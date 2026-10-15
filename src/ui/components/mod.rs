@@ -1,5 +1,4 @@
 pub mod color_picker;
-pub mod count_input;
 pub mod editor;
 pub mod help;
 pub mod icon_selector;

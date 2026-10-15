@@ -127,52 +127,51 @@ impl MainMenu {
             1 => {
                 // Initialize config and show result in footer
                 use crate::config::InitResult;
-                match crate::config::Config::init() {
-                    Ok(InitResult::Created(path)) => {
-                        self.status_message = Some(StatusMessage {
-                            message: format!("✓ Created config at {}", path.display()),
+                self.status_message = Some(match crate::config::Config::init() {
+                    Ok((result, note)) => {
+                        let mut message = match result {
+                            InitResult::Created(path) => {
+                                format!("✓ Created config at {}", path.display())
+                            }
+                            InitResult::AlreadyExists(path) => {
+                                format!("Config already exists at {}", path.display())
+                            }
+                        };
+                        if let Some(note) = note {
+                            message.push_str(&format!(". {note}"));
+                        }
+                        StatusMessage {
+                            message,
                             is_error: false,
-                        });
+                        }
                     }
-                    Ok(InitResult::AlreadyExists(path)) => {
-                        self.status_message = Some(StatusMessage {
-                            message: format!("Config already exists at {}", path.display()),
-                            is_error: false,
-                        });
-                    }
-                    Err(e) => {
-                        self.status_message = Some(StatusMessage {
-                            message: format!("✗ Error: {}", e),
-                            is_error: true,
-                        });
-                    }
-                }
+                    Err(e) => StatusMessage {
+                        message: format!("✗ Error: {}", e),
+                        is_error: true,
+                    },
+                });
                 None // Stay in menu
             }
             2 => {
-                // Check config and show result in footer
-                match crate::config::Config::load() {
-                    Ok(config) => match config.check() {
-                        Ok(_) => {
-                            self.status_message = Some(StatusMessage {
-                                message: "✓ Configuration is valid!".to_string(),
-                                is_error: false,
-                            });
-                        }
-                        Err(e) => {
-                            self.status_message = Some(StatusMessage {
-                                message: format!("✗ Invalid: {}", e),
-                                is_error: true,
-                            });
-                        }
+                // Check config and model names, and show the result in footer
+                let checked = crate::config::Config::load()
+                    .map_err(|e| format!("✗ Failed to load: {e}"))
+                    .and_then(|config| config.check().map_err(|e| format!("✗ Invalid: {e}")))
+                    .and_then(|()| {
+                        crate::config::ModelConfig::load()
+                            .map(|_| ())
+                            .map_err(|e| format!("✗ Failed to load: {e}"))
+                    });
+                self.status_message = Some(match checked {
+                    Ok(()) => StatusMessage {
+                        message: "✓ Configuration is valid!".to_string(),
+                        is_error: false,
                     },
-                    Err(e) => {
-                        self.status_message = Some(StatusMessage {
-                            message: format!("✗ Failed to load: {}", e),
-                            is_error: true,
-                        });
-                    }
-                }
+                    Err(message) => StatusMessage {
+                        message,
+                        is_error: true,
+                    },
+                });
                 None // Stay in menu
             }
             3 => {

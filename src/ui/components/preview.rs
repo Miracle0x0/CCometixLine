@@ -1,5 +1,5 @@
 use crate::config::{Config, SegmentId};
-use crate::core::segments::{SegmentContent, SegmentData};
+use crate::core::segments::SegmentData;
 use crate::core::StatusLineGenerator;
 use ratatui::{
     layout::Rect,
@@ -39,9 +39,7 @@ impl PreviewComponent {
         // Generate both string and TUI text versions
         let renderer = StatusLineGenerator::new(config.clone());
 
-        // Keep the same fitted output for preview assertions and display.
-        self.preview_cache = renderer
-            .generate_with_width(segments_data.clone(), Some(width.saturating_sub(2).into()));
+        self.preview_cache = renderer.generate(segments_data.clone());
 
         // Generate TUI-optimized text with smart segment wrapping for preview display
         // Use actual available width minus borders
@@ -82,50 +80,12 @@ impl PreviewComponent {
         &self.preview_cache
     }
 
-    /// Example activity rendered with the configured limit, so the preview shows `+N more`.
-    fn agents_sample(options: &HashMap<String, serde_json::Value>) -> SegmentContent {
-        use crate::agents::store::{Activity, Agent};
-        use crate::core::segments::AgentsSegment;
-
-        let mut activity = Activity::default();
-        for (id, (agent_type, started_at)) in [
-            ("reviewer", 120),
-            ("Explore", 165),
-            ("Plan", 188),
-            ("general-purpose", 195),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            activity.agents.insert(
-                id.to_string(),
-                Agent {
-                    agent_type: agent_type.to_string(),
-                    started_at,
-                    responded_at: None,
-                },
-            );
-        }
-        match AgentsSegment::max_agents(options) {
-            Ok(max_agents) => SegmentContent::Agents(
-                AgentsSegment::render(Some(&activity), 200, max_agents)
-                    .expect("the sample activity has active agents"),
-            ),
-            Err(error) => SegmentData {
-                primary: error.to_string(),
-                secondary: String::new(),
-                metadata: HashMap::new(),
-            }
-            .into(),
-        }
-    }
-
     /// Generate mock segments data for preview display
     /// This creates perfect preview data without depending on real environment
     fn generate_mock_segments_data(
         &self,
         config: &Config,
-    ) -> Vec<(crate::config::SegmentConfig, SegmentContent)> {
+    ) -> Vec<(crate::config::SegmentConfig, SegmentData)> {
         let mut segments_data = Vec::new();
 
         for segment_config in &config.segments {
@@ -133,13 +93,6 @@ impl PreviewComponent {
                 continue;
             }
 
-            if segment_config.id == SegmentId::Agents {
-                segments_data.push((
-                    segment_config.clone(),
-                    Self::agents_sample(&segment_config.options),
-                ));
-                continue;
-            }
             let mock_data = match segment_config.id {
                 SegmentId::Model => SegmentData {
                     primary: "Sonnet 4".to_string(),
@@ -150,7 +103,8 @@ impl PreviewComponent {
                         map
                     },
                 },
-                SegmentId::Agents => unreachable!(),
+                // Agents appear in Claude Code's subagent panel, not on the status line.
+                SegmentId::Agents => continue,
                 SegmentId::Effort => SegmentData {
                     primary: "high".to_string(),
                     secondary: String::new(),
@@ -237,7 +191,7 @@ impl PreviewComponent {
                 },
             };
 
-            segments_data.push((segment_config.clone(), mock_data.into()));
+            segments_data.push((segment_config.clone(), mock_data));
         }
 
         segments_data

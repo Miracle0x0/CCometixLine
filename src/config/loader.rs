@@ -20,7 +20,7 @@ pub struct ConfigLoader;
 impl ConfigLoader {
     /// Create the built-in theme files and the `models.toml` template where they are missing, and
     /// remove obsolete fields from an existing `models.toml`, returning a note about that cleanup.
-    /// Only explicit initialization calls this; rendering never writes files.
+    /// Only explicit initialization calls this; rendering never writes configuration files.
     pub fn init_files() -> Result<Option<String>, Box<dyn std::error::Error>> {
         let themes_dir = paths::themes_dir()?;
         fs::create_dir_all(&themes_dir)?;

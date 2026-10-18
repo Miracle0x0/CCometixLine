@@ -41,6 +41,10 @@ impl ThemePresets {
         segment.icon.plain = "&".into();
         segment.icon.nerd_font = "\u{f0c0}".into();
         segment.options.clear();
+        segment.options.insert(
+            "summary_ttl_seconds".into(),
+            crate::agents::summary::DEFAULT_TTL_SECONDS.into(),
+        );
         segment
     }
 

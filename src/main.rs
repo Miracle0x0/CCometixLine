@@ -34,9 +34,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let models = ModelConfig::load()?;
 
     if cli.subagent_statusline {
-        use ccometixline::agents::{self, panel};
+        use ccometixline::agents::{self, panel, summary};
         let input: panel::PanelInput = serde_json::from_reader(io::stdin().lock())?;
-        for row in panel::rows(&input, &config, agents::now()?, &models) {
+        let now = agents::now()?;
+        if config.agents_enabled() {
+            summary::save(&ccometixline::config::paths::claude_dir()?, &input, now)?;
+        }
+        for row in panel::rows(&input, &config, now, &models) {
             println!("{}", serde_json::to_string(&row)?);
         }
         return Ok(());
@@ -45,10 +49,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Read Claude Code data from stdin
     let input: InputData = serde_json::from_reader(io::stdin().lock())?;
     let segments_data = collect_all_segments(&config, &models, &input)?;
-    println!(
-        "{}",
-        StatusLineGenerator::new(config).generate(segments_data)
-    );
+    let statusline = StatusLineGenerator::new(config).generate(segments_data);
+    if !statusline.is_empty() {
+        println!("{statusline}");
+    }
 
     Ok(())
 }

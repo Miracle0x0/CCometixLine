@@ -43,7 +43,7 @@ pub fn settings_path(claude_dir: &Path) -> PathBuf {
     claude_dir.join("settings.json")
 }
 
-/// ccline's own files: config, themes, model names, update state and installation manifest.
+/// ccline's own files, including configuration, update state and per-session agent summaries.
 pub fn ccline_dir(claude_dir: &Path) -> PathBuf {
     claude_dir.join("ccline")
 }

@@ -103,8 +103,7 @@ impl PreviewComponent {
                         map
                     },
                 },
-                // Agents appear in Claude Code's subagent panel, not on the status line.
-                SegmentId::Agents => continue,
+                SegmentId::Agents => crate::agents::summary::segment_data(2),
                 SegmentId::Effort => SegmentData {
                     primary: "high".to_string(),
                     secondary: String::new(),

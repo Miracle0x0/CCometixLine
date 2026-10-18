@@ -6,6 +6,14 @@
 
 **所有内置主题默认关闭 Agents。** 运行 `ccline --config`，选择 **Agents**，按 **Enter** 启用，再按 **S** 保存。保存时 ccline 会在 `<配置目录>/settings.json`（见[配置目录](configuration.zh.md#配置目录)）中把 [`subagentStatusLine`](https://code.claude.com/docs/en/statusline#subagent-status-lines) 设为命令 `ccline --subagent-statusline`。重启 Claude Code 后生效。
 
+## 主状态栏
+
+Agents 图标和 `2 Agents running` 与模型名称、思考强度显示在同一行。数量只统计最近一次原生面板输入中 `type` 为 `local_agent` 且 `status` 为 `running` 的条目，不包含已完成、失败或被停止的条目。这是传入的可见条目数量，不是全部运行中的子代理总数。
+
+每次面板刷新都会把数量和观测时间原子写入 `<配置目录>/ccline/agents/<十六进制编码的会话 ID>.json`。主状态栏只读取自身会话的快照。数量缺失、为零或过期时隐藏该段落，不留下多余分隔符或空行。读写或解析失败会明确报错。
+
+Claude Code 在面板清空后不再调用面板命令，因此快照默认在 15 秒后过期。可以在 `config.toml` 或主题文件的 Agents 段落中设置 `options = { summary_ttl_seconds = 15 }` 调整间隔；`0` 关闭过期。数量更新或隐藏在主状态栏下一次刷新时生效。需要空闲时也刷新，可自行把 `statusLine.refreshInterval` 设为 `5` 等值；ccline 不修改该设置。
+
 ## 行内容
 
 Claude Code 每次刷新面板时运行该命令，并通过 stdin 传入可见的行；ccline 将每一行替换为类似下面的内容：
@@ -23,11 +31,11 @@ Explore · find config loading · 1m20s · 12.4k (6%) · Sonnet 5.5 · high
 5. 通过 [`models.toml`](configuration.zh.md#模型名称modelstoml) 解析的模型显示名称。
 6. 配置的推理工作量；数值预算显示为 `8k budget`。
 
-输入中缺失的字段会被省略。行使用 Agents 段落的图标、图标颜色、文字颜色和粗体设置；背景和分隔符不适用，也不添加标题。
+输入中缺失的字段会被省略。行直接以代理类型开头，使用 Agents 段落的文字颜色和粗体设置，不使用图标、背景或段落分隔符。ccline 不添加标题、前导空格或空行；主状态栏与面板之间的宿主布局间距由 Claude Code 控制。
 
 行宽超过 Claude Code 提供的 `columns` 时，ccline 依次去掉工作量、模型、token 数，最后用 `…` 截短标签。宽度按终端显示列计算，正确处理中文、组合字符和 emoji，ANSI 颜色不占列宽。
 
-哪些行存在由 Claude Code 决定：成功结束的子代理行会立即消失，失败或被停止的行保留 30 秒，面板只列出有限数量的行（[官方文档](https://code.claude.com/docs/en/sub-agents#run-subagents-in-foreground-or-background)）。`agentType` 字段要求 Claude Code 2.1.293 或更新版本。Agents 段落被禁用或配置中没有该段落时，命令不输出任何内容，Claude Code 保留默认行。Agents 段落本身不会在主状态栏输出内容。格式错误的面板输入会明确报错。
+哪些行存在由 Claude Code 决定：成功结束的子代理行会立即消失，失败或被停止的行保留 30 秒，面板只列出有限数量的行（[官方文档](https://code.claude.com/docs/en/sub-agents#run-subagents-in-foreground-or-background)）。`agentType` 字段要求 Claude Code 2.1.293 或更新版本。Agents 段落被禁用或配置中没有该段落时，命令不输出任何内容，Claude Code 保留默认行。格式错误的面板输入会明确报错。
 
 ## 所有权与冲突
 

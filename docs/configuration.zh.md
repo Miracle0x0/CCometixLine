@@ -11,6 +11,7 @@ ccline 读写的所有文件都位于 Claude Code 的配置目录下，下文记
 | `<配置目录>/ccline/config.toml` | 主配置：样式、段落和主题名称 |
 | `<配置目录>/ccline/themes/*.toml` | 内置和自定义主题文件 |
 | `<配置目录>/ccline/models.toml` | 模型显示名称，见[模型名称](#模型名称modelstoml) |
+| `<配置目录>/ccline/agents/*.json` | 按会话保存的可见运行子代理数量及观测时间 |
 | `<配置目录>/ccline/agents-installation.json` | ccline 安装的子代理面板命令，见[子代理面板](subagent-panel.zh.md) |
 | `<配置目录>/ccline/.update_state.json` | Update 段落的更新检查状态 |
 | `<配置目录>/settings.json` | Claude Code 设置；ccline 只修改其中的 `subagentStatusLine` |
@@ -19,7 +20,7 @@ ccline 从自身运行环境读取 `CLAUDE_CONFIG_DIR`。以 `CLAUDE_CONFIG_DIR=
 
 ## 初始化与错误
 
-渲染状态栏和子代理面板时只读取文件。内置主题文件和 `models.toml` 模板在缺失时由主菜单的 **Initialize Config**（无输入直接运行 `ccline`）以及 TUI（`ccline --config`）启动时创建。这两个操作也会清理已有的 `models.toml`，见[过时字段](#过时字段)。主菜单的 **Check Configuration** 会同时检查 `config.toml` 和 `models.toml`。TUI 中 **S** 保存 `config.toml`，**W** 和 **Ctrl+S** 保存主题文件。
+渲染时只读取配置，不修改配置文件。启用 Agents 后，子代理面板会写入按会话保存的数量快照，主状态栏读取该快照。内置主题文件和 `models.toml` 模板在缺失时由主菜单的 **Initialize Config**（无输入直接运行 `ccline`）以及 TUI（`ccline --config`）启动时创建。这两个操作也会清理已有的 `models.toml`，见[过时字段](#过时字段)。主菜单的 **Check Configuration** 会同时检查 `config.toml` 和 `models.toml`。TUI 中 **S** 保存 `config.toml`，**W** 和 **Ctrl+S** 保存主题文件。
 
 缺少 `config.toml` 时使用默认主题，缺少 `models.toml` 时使用内置模型名称。文件存在但无法读取或解析时会明确报错，不回退到默认值。这同样适用于 `--theme` 选择的主题文件：主题目录中的文件优先于同名内置主题，未知主题名会报错。
 

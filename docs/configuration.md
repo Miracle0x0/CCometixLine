@@ -11,6 +11,7 @@ Every file ccline reads or writes lives under Claude Code's configuration direct
 | `<config dir>/ccline/config.toml` | Main configuration: style, segments, and theme name |
 | `<config dir>/ccline/themes/*.toml` | Built-in and custom theme files |
 | `<config dir>/ccline/models.toml` | Model display names, see [Model Names](#model-names-modelstoml) |
+| `<config dir>/ccline/agents/*.json` | Per-session visible running-agent count and observation time |
 | `<config dir>/ccline/agents-installation.json` | The subagent panel command ccline installed, see [Subagent Panel](subagent-panel.md) |
 | `<config dir>/ccline/.update_state.json` | Update check state for the Update segment |
 | `<config dir>/settings.json` | Claude Code settings; ccline edits only `subagentStatusLine` |
@@ -19,7 +20,7 @@ ccline reads `CLAUDE_CONFIG_DIR` from the environment it runs in. A status line 
 
 ## Initialization and Errors
 
-Rendering the status line and the subagent panel only reads files. Built-in theme files and the `models.toml` template are created where missing by **Initialize Config** in the main menu (run `ccline` without input) and when the TUI (`ccline --config`) starts. The same two actions clean up an existing `models.toml`, see [Obsolete Fields](#obsolete-fields). **Check Configuration** in the main menu validates both `config.toml` and `models.toml`. **S** in the TUI saves `config.toml`; **W** and **Ctrl+S** save theme files.
+Rendering reads configuration without changing it. With Agents enabled, the subagent panel writes its per-session count snapshot and the main status line reads it. Built-in theme files and the `models.toml` template are created where missing by **Initialize Config** in the main menu (run `ccline` without input) and when the TUI (`ccline --config`) starts. The same two actions clean up an existing `models.toml`, see [Obsolete Fields](#obsolete-fields). **Check Configuration** in the main menu validates both `config.toml` and `models.toml`. **S** in the TUI saves `config.toml`; **W** and **Ctrl+S** save theme files.
 
 A missing `config.toml` means the default theme, and a missing `models.toml` means the built-in model names. A file that exists but cannot be read or parsed is reported as an error instead of falling back to defaults. This includes a theme file selected with `--theme`: a file in the themes directory takes priority over the built-in theme of the same name, and an unknown theme name is an error.
 

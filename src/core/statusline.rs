@@ -180,7 +180,7 @@ impl StatusLineGenerator {
         Text::from(tui_lines)
     }
 
-    pub(crate) fn render_segment(&self, config: &SegmentConfig, data: &SegmentData) -> String {
+    fn render_segment(&self, config: &SegmentConfig, data: &SegmentData) -> String {
         let icon = if let Some(dynamic_icon) = data.metadata.get("dynamic_icon") {
             dynamic_icon.clone()
         } else {
@@ -200,22 +200,14 @@ impl StatusLineGenerator {
             };
 
             let text_styled = self
-                .apply_style(
-                    &data.primary,
-                    config.colors.text.as_ref(),
-                    config.styles.text_bold,
-                )
+                .render_text(config, &data.primary)
                 .replace("\x1b[0m", "");
 
             let mut segment_content = format!(" {} {} ", icon_colored, text_styled);
 
             if !data.secondary.is_empty() {
                 let secondary_styled = self
-                    .apply_style(
-                        &data.secondary,
-                        config.colors.text.as_ref(),
-                        config.styles.text_bold,
-                    )
+                    .render_text(config, &data.secondary)
                     .replace("\x1b[0m", "");
                 segment_content.push_str(&format!("{} ", secondary_styled));
             }
@@ -225,23 +217,12 @@ impl StatusLineGenerator {
         } else {
             // No background color, use original logic
             let icon_colored = self.apply_color(&icon, config.colors.icon.as_ref());
-            let text_styled = self.apply_style(
-                &data.primary,
-                config.colors.text.as_ref(),
-                config.styles.text_bold,
-            );
+            let text_styled = self.render_text(config, &data.primary);
 
             let mut segment = format!("{} {}", icon_colored, text_styled);
 
             if !data.secondary.is_empty() {
-                segment.push_str(&format!(
-                    " {}",
-                    self.apply_style(
-                        &data.secondary,
-                        config.colors.text.as_ref(),
-                        config.styles.text_bold
-                    )
-                ));
+                segment.push_str(&format!(" {}", self.render_text(config, &data.secondary)));
             }
 
             segment
@@ -272,16 +253,17 @@ impl StatusLineGenerator {
         }
     }
 
-    fn apply_style(&self, text: &str, color: Option<&AnsiColor>, bold: bool) -> String {
+    /// Apply the segment's text styling without an icon, background, padding or separator.
+    pub(crate) fn render_text(&self, config: &SegmentConfig, text: &str) -> String {
         let mut codes = Vec::new();
 
         // Add style codes
-        if bold {
+        if config.styles.text_bold {
             codes.push("1".to_string()); // Bold: \x1b[1m
         }
 
         // Add color codes
-        match color {
+        match config.colors.text.as_ref() {
             Some(AnsiColor::Color16 { c16 }) => {
                 let color_code = if *c16 < 8 { 30 + c16 } else { 90 + (c16 - 8) };
                 codes.push(color_code.to_string());
@@ -437,8 +419,12 @@ pub fn collect_all_segments(
         }
 
         let segment_data = match segment_config.id {
-            // Claude Code's subagent panel shows the agents; the main status line has no row.
-            SegmentId::Agents => None,
+            SegmentId::Agents => crate::agents::summary::collect(
+                &crate::config::paths::claude_dir()?,
+                &input.session_id,
+                segment_config,
+                crate::agents::now()?,
+            )?,
             SegmentId::Model => ModelSegment::new(models).collect(input),
             SegmentId::Effort => EffortSegment::new().collect(input),
             SegmentId::Directory => DirectorySegment::new().collect(input),
@@ -483,29 +469,5 @@ mod tests {
             visible_width("\x1b]8;;https://example.com\x07中\x1b]8;;\x07"),
             2
         );
-    }
-
-    #[test]
-    fn enabled_agents_add_nothing_to_the_main_status_line() {
-        use crate::config::{ModelConfig, SegmentId};
-        use crate::ui::themes::ThemePresets;
-        let input = serde_json::from_value(crate::core::segments::test_payload()).unwrap();
-        for mut config in [
-            ThemePresets::get_default(),
-            ThemePresets::get_powerline_dark(),
-        ] {
-            config
-                .segments
-                .retain(|s| matches!(s.id, SegmentId::Agents | SegmentId::Directory));
-            let renderer = StatusLineGenerator::new(config.clone());
-            let without = renderer
-                .generate(collect_all_segments(&config, &ModelConfig::default(), &input).unwrap());
-            for segment in &mut config.segments {
-                segment.enabled = true;
-            }
-            let collected = collect_all_segments(&config, &ModelConfig::default(), &input).unwrap();
-            assert!(collected.iter().all(|(s, _)| s.id != SegmentId::Agents));
-            assert_eq!(renderer.generate(collected), without);
-        }
     }
 }

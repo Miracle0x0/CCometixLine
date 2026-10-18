@@ -2,7 +2,7 @@
 
 [English](segments.md) | [中文](segments.zh.md)
 
-Each segment reads Claude Code's [status line input](https://code.claude.com/docs/en/statusline#available-data) directly. Values the host reports as missing or null are shown as unknown, never as zero; malformed input is reported as an error.
+Session data comes from Claude Code's [status line input](https://code.claude.com/docs/en/statusline#available-data); the Agents count comes from its native subagent panel. Values the host reports as missing or null are shown as unknown, never as zero; malformed input is reported as an error.
 
 ## Context Window
 
@@ -59,4 +59,4 @@ Set `enabled = false` to hide Effort.
 
 ## Agents
 
-The Agents segment adds nothing to the main status line. Enabling it installs ccline's rows for Claude Code's own subagent panel; see [Subagent Panel](subagent-panel.md).
+The Agents segment shows its icon and `2 Agents running` alongside the model and effort. The count covers running entries in the latest native panel input, not all subagents. Enabling it also installs text-only rows for Claude Code's subagent panel. Missing, zero, or expired counts hide the segment; see [Subagent Panel](subagent-panel.md) for the cache and expiry setting.

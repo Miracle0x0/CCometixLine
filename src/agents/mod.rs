@@ -3,6 +3,7 @@
 
 pub mod integration;
 pub mod panel;
+pub mod summary;
 
 #[cfg(test)]
 mod tests;

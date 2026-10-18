@@ -6,6 +6,14 @@
 
 **Agents is disabled by default in every built-in theme.** Run `ccline --config`, select **Agents**, press **Enter** to enable it, then **S** to save. Saving sets [`subagentStatusLine`](https://code.claude.com/docs/en/statusline#subagent-status-lines) in `<config dir>/settings.json` (see [Configuration Directory](configuration.md#configuration-directory)) to the command `ccline --subagent-statusline`. Restart Claude Code to apply.
 
+## Main Status Line
+
+The Agents icon and `2 Agents running` appear in the main status line alongside the model and effort. Only `local_agent` entries with status `running` in the latest native panel input are counted; completed, failed, and killed entries are excluded. This is a count of the supplied visible entries, not all running subagents.
+
+Each panel refresh atomically saves the count and observation time in `<config dir>/ccline/agents/<hex-encoded session ID>.json`. The main status line reads only its own session's snapshot. A missing, zero, or expired count hides the segment without an extra separator or blank line. Read, write, and parse failures are reported as errors.
+
+Claude Code stops calling the panel command when its rows disappear, so snapshots expire after 15 seconds by default. Set `options = { summary_ttl_seconds = 15 }` on the Agents segment in `config.toml` or a theme file to change this interval; `0` disables expiry. The count updates or disappears on the next main status line refresh. For updates while idle, set `statusLine.refreshInterval` yourself, for example to `5`; ccline does not change this setting.
+
 ## Rows
 
 Claude Code runs the command on each panel refresh with the visible rows on stdin, and ccline replaces each row with a line such as:
@@ -23,11 +31,11 @@ The fields are:
 5. The model's display name, resolved through [`models.toml`](configuration.md#model-names-modelstoml).
 6. The configured reasoning effort; a numeric budget shows as `8k budget`.
 
-Fields absent from the input are omitted. Rows use the Agents segment's icon, icon color, text color, and bold setting; backgrounds and separators do not apply, and no heading is added.
+Fields absent from the input are omitted. Rows start directly with the agent type and use the Agents segment's text color and bold setting. Icons, backgrounds, and segment separators do not apply; ccline adds no heading, leading padding, or blank line. Spacing between the host's main status line and panel is controlled by Claude Code.
 
 When a row is wider than the `columns` value Claude Code provides, ccline drops the effort, then the model, then the token count, and finally shortens the label with `…`. Width is measured in terminal cells, accounting for CJK text, combining characters, and emoji; ANSI colors take no space.
 
-Claude Code decides which rows exist: a successfully finished subagent's row disappears immediately, a failed or stopped one stays for 30 seconds, and the panel lists a limited number of rows ([official docs](https://code.claude.com/docs/en/sub-agents#run-subagents-in-foreground-or-background)). The `agentType` field requires Claude Code 2.1.293 or later. With the Agents segment disabled or missing from the configuration, the command writes nothing and Claude Code keeps its default rows. The Agents segment itself adds nothing to the main status line. Malformed panel input produces an explicit error.
+Claude Code decides which rows exist: a successfully finished subagent's row disappears immediately, a failed or stopped one stays for 30 seconds, and the panel lists a limited number of rows ([official docs](https://code.claude.com/docs/en/sub-agents#run-subagents-in-foreground-or-background)). The `agentType` field requires Claude Code 2.1.293 or later. With the Agents segment disabled or missing from the configuration, the command writes nothing and Claude Code keeps its default rows. Malformed panel input produces an explicit error.
 
 ## Ownership and Conflicts
 

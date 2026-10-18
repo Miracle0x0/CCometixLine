@@ -5,6 +5,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
 
+pub fn panel_task() -> serde_json::Value {
+    serde_json::json!({"id":"t1","name":"scout","type":"local_agent","agentType":"Explore","status":"running",
+        "description":"Find config loading","label":"查找配置加载","startTime":100_000_u64,
+        "model":"custom-model","effort":"high","contextWindowSize":200_000,"tokenCount":12_400,
+        "tokenSamples":[12_400],"cwd":"/tmp"})
+}
+
 /// A fresh directory under the system temporary directory, removed with its contents on drop.
 pub struct TestDir(pub PathBuf);
 

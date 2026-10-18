@@ -5,12 +5,13 @@
 
 use super::{format_elapsed, printable};
 use crate::config::{Config, ModelConfig, SegmentId};
-use crate::core::segments::{context_window::format_tokens, SegmentData};
+use crate::core::segments::context_window::format_tokens;
 use crate::core::statusline::{visible_width, StatusLineGenerator};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct PanelInput {
+    pub session_id: String,
     /// Usable row width in terminal cells.
     pub columns: usize,
     pub tasks: Vec<PanelTask>,
@@ -47,7 +48,7 @@ pub struct PanelRow {
     pub content: String,
 }
 
-/// One row per task, styled with the Agents segment's icon and text colors. Without an enabled
+/// One row per task, styled with the Agents segment's text color and bold setting. Without an enabled
 /// Agents segment nothing is written, so Claude Code keeps its default rows.
 pub fn rows(input: &PanelInput, config: &Config, now: u64, models: &ModelConfig) -> Vec<PanelRow> {
     let Some(segment) = config
@@ -57,20 +58,8 @@ pub fn rows(input: &PanelInput, config: &Config, now: u64, models: &ModelConfig)
     else {
         return Vec::new();
     };
-    // A panel row is not a Powerline segment: backgrounds and separators do not apply.
-    let mut segment = segment.clone();
-    segment.colors.background = None;
     let renderer = StatusLineGenerator::new(config.clone());
-    let render = |fields: &[String]| {
-        renderer.render_segment(
-            &segment,
-            &SegmentData {
-                primary: fields.join(" · "),
-                secondary: String::new(),
-                metadata: Default::default(),
-            },
-        )
-    };
+    let render = |fields: &[String]| renderer.render_text(segment, &fields.join(" · "));
     input
         .tasks
         .iter()

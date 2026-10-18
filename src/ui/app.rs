@@ -754,7 +754,7 @@ mod tests {
     }
 
     #[test]
-    fn agents_is_opt_in_and_both_tui_panels_toggle_it_without_a_status_line_preview() {
+    fn agents_is_opt_in_and_both_tui_panels_toggle_its_status_line_preview() {
         let mut config = ThemePresets::get_default();
         config
             .segments
@@ -768,7 +768,7 @@ mod tests {
             .position(|s| s.id == SegmentId::Agents)
             .unwrap();
         assert!(!app.config.agents_enabled());
-        assert!(!app.preview.get_preview_cache().contains("Agents:"));
+        assert!(!app.preview.get_preview_cache().contains("Agents running"));
         assert!(screen(&mut app, 120, 40).contains("Agents"));
         let mut unchanged = app.config.clone();
         unchanged.segments.retain(|s| s.id != SegmentId::Agents);
@@ -776,8 +776,8 @@ mod tests {
         let before = app.preview.get_preview_cache().to_string();
         app.toggle_current();
         assert!(app.config.agents_enabled());
-        // Agents appear in Claude Code's subagent panel, never on the main status line.
-        assert_eq!(app.preview.get_preview_cache(), before);
+        assert_ne!(app.preview.get_preview_cache(), before);
+        assert!(app.preview.get_preview_cache().contains("2 Agents running"));
         assert!(app
             .status_message
             .as_ref()
@@ -790,6 +790,7 @@ mod tests {
         reopened.switch_panel();
         reopened.toggle_current();
         assert!(!reopened.config.agents_enabled());
+        assert_eq!(reopened.preview.get_preview_cache(), before);
         assert!(reopened
             .status_message
             .as_ref()

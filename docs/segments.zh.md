@@ -2,7 +2,7 @@
 
 [English](segments.md) | [中文](segments.zh.md)
 
-各段落直接读取 Claude Code 的[状态栏输入](https://code.claude.com/docs/en/statusline#available-data)。宿主报告为缺失或 null 的值显示为未知，不会显示为零；格式错误的输入会明确报错。
+会话数据来自 Claude Code 的[状态栏输入](https://code.claude.com/docs/en/statusline#available-data)，Agents 数量来自原生子代理面板。宿主报告为缺失或 null 的值显示为未知，不会显示为零；格式错误的输入会明确报错。
 
 ## 上下文窗口（Context Window）
 
@@ -59,4 +59,4 @@ options = {}
 
 ## Agents
 
-Agents 段落不会在主状态栏输出内容。启用后，ccline 会为 Claude Code 自带的子代理面板渲染行，见[子代理面板](subagent-panel.zh.md)。
+Agents 段落在模型名称、思考强度所在行显示图标和 `2 Agents running`。数量只统计最近一次原生面板输入中的运行条目，不代表所有子代理。启用后还会为 Claude Code 的子代理面板渲染无图标的文字行。数量缺失、为零或已过期时隐藏该段落；缓存及过期配置见[子代理面板](subagent-panel.zh.md)。

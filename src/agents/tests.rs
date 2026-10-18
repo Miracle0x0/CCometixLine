@@ -166,6 +166,7 @@ mod panel_rows {
     use super::super::panel::{rows, PanelInput, PanelRow};
     use crate::config::{Config, ModelConfig, SegmentId};
     use crate::core::statusline::visible_width;
+    use crate::test_support::panel_task as task;
     use crate::ui::themes::ThemePresets;
     use serde_json::json;
 
@@ -183,13 +184,6 @@ mod panel_rows {
         config
     }
 
-    fn task() -> serde_json::Value {
-        json!({"id":"t1","name":"scout","type":"local_agent","agentType":"Explore","status":"running",
-            "description":"Find config loading","label":"查找配置加载","startTime":100_000_u64,
-            "model":"custom-model","effort":"high","contextWindowSize":200_000,"tokenCount":12_400,
-            "tokenSamples":[12_400],"cwd":"/tmp"})
-    }
-
     fn render(config: &Config, columns: usize, tasks: Vec<serde_json::Value>) -> Vec<PanelRow> {
         let input: PanelInput =
             serde_json::from_value(json!({"session_id":"s","transcript_path":"/t",
@@ -199,20 +193,24 @@ mod panel_rows {
     }
 
     #[test]
-    fn rows_show_every_field_in_the_agents_colors_without_backgrounds() {
+    fn rows_show_every_field_without_icons_padding_backgrounds_or_blank_lines() {
         for theme in ["default", "powerline-dark"] {
-            let rows = render(&config(theme, true), 500, vec![task()]);
+            let mut config = config(theme, true);
+            let segment = config
+                .segments
+                .iter_mut()
+                .find(|segment| segment.id == SegmentId::Agents)
+                .unwrap();
+            segment.styles.text_bold = true;
+            segment.colors.text = Some(crate::config::AnsiColor::Color16 { c16: 3 });
+            let rows = render(&config, 500, vec![task()]);
             assert_eq!(rows.len(), 1);
             assert_eq!(rows[0].id, "t1");
-            assert!(
-                rows[0]
-                    .content
-                    .contains("Explore · 查找配置加载 · 1m20s · 12.4k (6%) · custom-model · high"),
-                "{theme}: {:?}",
-                rows[0].content
+            assert_eq!(
+                rows[0].content,
+                "\x1b[1;33mExplore · 查找配置加载 · 1m20s · 12.4k (6%) · custom-model · high\x1b[0m",
+                "{theme}"
             );
-            assert!(!rows[0].content.contains("\x1b[48"), "{theme}");
-            assert!(!rows[0].content.contains('\n'));
         }
     }
 
@@ -258,7 +256,7 @@ mod panel_rows {
         let row = render(&config, 500, vec![failed.clone()]).remove(0).content;
         assert!(row.contains("local_agent · abc"), "{row:?}");
         failed["effort"] = json!(true);
-        let input = json!({"columns":80,"tasks":[failed]});
+        let input = json!({"session_id":"s","columns":80,"tasks":[failed]});
         assert!(serde_json::from_value::<PanelInput>(input).is_err());
     }
 

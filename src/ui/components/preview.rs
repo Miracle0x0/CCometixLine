@@ -160,6 +160,23 @@ impl PreviewComponent {
                         map
                     },
                 },
+                SegmentId::SessionName | SegmentId::Worktree | SegmentId::PullRequest => {
+                    SegmentData {
+                        primary: match segment_config.id {
+                            SegmentId::SessionName => "Fix authentication",
+                            SegmentId::Worktree => "feature-login",
+                            SegmentId::PullRequest => "PR #123",
+                            _ => unreachable!(),
+                        }
+                        .into(),
+                        secondary: if segment_config.id == SegmentId::PullRequest {
+                            "· pending".into()
+                        } else {
+                            String::new()
+                        },
+                        metadata: HashMap::new(),
+                    }
+                }
                 SegmentId::Session => SegmentData {
                     primary: "3m45s".to_string(),
                     secondary: "\x1b[32m+156\x1b[0m \x1b[31m-23\x1b[0m".to_string(),

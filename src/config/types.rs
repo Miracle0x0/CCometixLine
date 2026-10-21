@@ -74,6 +74,9 @@ pub enum SegmentId {
     Usage,
     Cost,
     Session,
+    SessionName,
+    Worktree,
+    PullRequest,
     OutputStyle,
     Update,
 }
@@ -91,6 +94,9 @@ impl SegmentId {
             Self::Usage => "Usage",
             Self::Cost => "Cost",
             Self::Session => "Session",
+            Self::SessionName => "Session Name",
+            Self::Worktree => "Worktree",
+            Self::PullRequest => "Pull Request",
             Self::OutputStyle => "Output Style",
             Self::Update => "Update",
         }
@@ -116,6 +122,41 @@ pub struct Model {
 #[derive(Deserialize)]
 pub struct Workspace {
     pub current_dir: String,
+    pub git_worktree: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PullRequest {
+    pub number: u64,
+    pub url: String,
+    pub kind: Option<PullRequestKind>,
+    pub review_state: Option<ReviewState>,
+}
+
+#[derive(Debug, Deserialize)]
+pub enum PullRequestKind {
+    #[serde(rename = "mr")]
+    MergeRequest,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewState {
+    Approved,
+    Pending,
+    ChangesRequested,
+    Draft,
+}
+
+impl ReviewState {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Approved => "approved",
+            Self::Pending => "pending",
+            Self::ChangesRequested => "changes requested",
+            Self::Draft => "draft",
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -216,6 +257,7 @@ pub struct CacheMissCause {
 #[derive(Deserialize)]
 pub struct InputData {
     pub session_id: String,
+    pub session_name: Option<String>,
     pub model: Model,
     pub effort: Option<Effort>,
     pub workspace: Workspace,
@@ -224,6 +266,7 @@ pub struct InputData {
     pub output_style: Option<OutputStyle>,
     pub rate_limits: Option<RateLimits>,
     pub prompt_cache: Option<PromptCache>,
+    pub pr: Option<PullRequest>,
 }
 
 impl Config {

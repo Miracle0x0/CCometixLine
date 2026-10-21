@@ -148,3 +148,77 @@ fn empty_expired_disabled_and_invalid_summaries_do_not_leave_blank_output() {
     assert!(render(&dir.0, false, &input).is_empty());
     assert_eq!(fs::read_to_string(cache).unwrap(), "{");
 }
+
+#[test]
+fn native_segments_render_session_worktree_review_and_cache_without_external_state() {
+    let dir = TestDir::new();
+    let mut config = ThemePresets::get_default();
+    config.segments = ThemePresets::native_segments("default").to_vec();
+    for segment in &mut config.segments {
+        segment.enabled = true;
+    }
+    save_config(&dir.0, &config);
+    let mut input = status_input("native");
+    assert!(render(&dir.0, false, &input).is_empty());
+    input["session_name"] = json!("Repair\n登录");
+    input["workspace"]["git_worktree"] = json!("feature-login");
+    input["prompt_cache"] = json!({"warm":false,"caching_observed":true,"hit_ratio":0.91,
+        "expires_at":null,"misses":1,"expected_rebuilds":12,
+        "last_miss_cause":{"causes":["tools_changed"]}});
+    input["pr"] = json!({"number":123,"url":"https://github.com/org/repo/pull/123",
+        "review_state":"changes_requested"});
+    let output = render(&dir.0, false, &input);
+    assert_eq!(output.lines().count(), 1);
+    for text in [
+        "Repair登录",
+        "feature-login",
+        "91%",
+        "cold",
+        "1 miss",
+        "last: tools_changed",
+        "changes requested",
+    ] {
+        assert!(output.contains(text), "missing {text}: {output}");
+    }
+    assert!(
+        output.contains("\x1b]8;;https://github.com/org/repo/pull/123\x1b\\PR #123\x1b]8;;\x1b\\")
+    );
+    assert!(!output.contains("12 misses"));
+    for state in ["approved", "pending", "draft"] {
+        input["pr"] = json!({"number":42,"url":"https://gitlab.com/team/sub/repo/-/merge_requests/42", "kind":"mr", "review_state":state});
+        let output = render(&dir.0, false, &input);
+        assert!(output.contains("MR !42"));
+        assert!(output.contains(state));
+    }
+    input["pr"].as_object_mut().unwrap().remove("review_state");
+    assert!(render(&dir.0, false, &input).contains("MR !42"));
+    input["session_name"] = json!(null);
+    input["workspace"]["git_worktree"] = json!(null);
+    input["pr"] = json!(null);
+    input["prompt_cache"] = json!(null);
+    assert!(render(&dir.0, false, &input).is_empty());
+}
+
+#[test]
+fn malformed_native_identity_fields_fail_instead_of_rendering_defaults() {
+    let dir = TestDir::new();
+    for (key, value) in [
+        ("session_name", json!(3)),
+        (
+            "workspace",
+            json!({"current_dir":"/work","git_worktree":true}),
+        ),
+        ("pr", json!({"number":1})),
+        (
+            "pr",
+            json!({"number":1,"url":"https://example.com","review_state":"not-a-state"}),
+        ),
+    ] {
+        let mut input = status_input("invalid");
+        input[key] = value;
+        let output = invoke(&dir.0, false, &input);
+        assert!(!output.status.success(), "{key}");
+        assert!(output.stdout.is_empty());
+        assert!(!output.stderr.is_empty());
+    }
+}

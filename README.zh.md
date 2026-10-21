@@ -145,7 +145,7 @@ ccline --theme my-custom-theme
 - **Effort**：当前推理工作量档位，例如 `high`
 - **上下文窗口**：Claude Code 报告的上下文占用，例如 `20% · 200k tokens`；首次响应前及 `/compact` 刚结束时显示 `-`
 
-可选段落包括 **Usage**（订阅窗口和网关预算，例如 `63% · 24% · 2h`）、Prompt Cache、Session、Cost、Output Style 和 Update。各段落的数据来源、格式和选项见[段落说明](docs/segments.zh.md)。如需在会话空闲时让 Usage 倒计时保持更新，请自行在 `statusLine` 中设置 `refreshInterval`；ccline 不管理该设置。
+可选段落包括 **Usage**（订阅窗口和网关预算，例如 `63% · 24% · 2h`）、Prompt Cache、Session Name、Worktree、Pull Request、Session、Cost、Output Style 和 Update。各段落的数据来源、格式和选项见[段落说明](docs/segments.zh.md)。如需在会话空闲时让 Usage 倒计时保持更新，请自行在 `statusLine` 中设置 `refreshInterval`；ccline 不管理该设置。
 
 ## 配置
 

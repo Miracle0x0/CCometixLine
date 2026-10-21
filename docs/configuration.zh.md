@@ -26,7 +26,7 @@ ccline 从自身运行环境读取 `CLAUDE_CONFIG_DIR`。以 `CLAUDE_CONFIG_DIR=
 
 ## 段落
 
-所有段落都可以开关，并配置图标、颜色、背景和文字样式；在 TUI 中用 **Shift+Up/Down** 调整顺序。支持的段落：Directory、Git、Model、Effort、Agents、Context Window、Prompt Cache、Usage、Session、Cost、Output Style、Update。各数据段落的显示内容见[段落说明](segments.zh.md)。
+所有段落都可以开关，并配置图标、颜色、背景和文字样式；在 TUI 中用 **Shift+Up/Down** 调整顺序。支持的段落：Directory、Git、Model、Effort、Agents、Context Window、Prompt Cache、Usage、Session Name、Worktree、Pull Request、Session、Cost、Output Style、Update。各数据段落的显示内容见[段落说明](segments.zh.md)。
 
 ## 模型名称（`models.toml`）
 

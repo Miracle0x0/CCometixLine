@@ -37,6 +37,18 @@ If no window and no spend limit is present, the segment is hidden.
 
 Claude Code re-runs the status line when a reset time passes, but its other update events can go quiet while the main session is idle. To keep the countdown current during idle periods, set [`refreshInterval`](https://code.claude.com/docs/en/statusline#manually-configure-a-status-line) in your `statusLine` setting yourself, for example `"refreshInterval": 60` for minute-level countdowns. ccline never adds, changes, or removes `refreshInterval`.
 
+## Session and Repository Identity
+
+**Session Name**, **Worktree**, and **Pull Request** are independent segments, disabled by default in every theme. Enable them in `ccline --config` and press **S** to save. They read [native status line fields](https://code.claude.com/docs/en/statusline#available-data) without querying Git, GitHub, or GitLab.
+
+| Segment / config ID | Data | Display |
+| --- | --- | --- |
+| Session Name / `session_name` | `session_name` | Custom name from `/rename` or `--name`, or the host's AI-generated title |
+| Worktree / `worktree` | `workspace.git_worktree` | Name of the linked Git worktree containing the current directory, including worktrees created outside Claude Code |
+| Pull Request / `pull_request` | `pr.number`, `pr.url`, `pr.kind`, `pr.review_state` | Clickable `PR #123` or `MR !42`, followed by the reported review state when available |
+
+Missing or null data hides its segment. Session Name is separate from Session's duration and line-change statistics. Worktree is absent in the main working tree. Pull Request disappears when the host stops reporting the closed or merged review; it performs no additional polling. Links use OSC 8 and require terminal support. State labels are `approved`, `pending`, `changes requested`, and `draft`; for GitLab, `approved` means the host reports the MR as mergeable, not an independent approval check. GitHub PR fields require Claude Code 2.1.145+, GitLab MR fields 2.1.234+, and `workspace.git_worktree` 2.1.98+.
+
 ## Prompt Cache
 
 Prompt Cache is disabled by default. Enable **Prompt Cache** in `ccline --config` and press **S** to save. It reads the native [`prompt_cache`](https://code.claude.com/docs/en/statusline#prompt-cache-fields) object (Claude Code 2.1.251+); it makes no API requests and reads no transcript files.

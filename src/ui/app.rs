@@ -82,10 +82,12 @@ impl App {
                 config.segments.push(effort);
             }
         }
-        for segment in [
-            crate::ui::themes::ThemePresets::agents_segment(&config.theme),
-            crate::ui::themes::ThemePresets::prompt_cache_segment(&config.theme),
-        ] {
+        for segment in std::iter::once(crate::ui::themes::ThemePresets::agents_segment(
+            &config.theme,
+        ))
+        .chain(crate::ui::themes::ThemePresets::native_segments(
+            &config.theme,
+        )) {
             if !config.segments.iter().any(|s| s.id == segment.id) {
                 config.segments.push(segment);
             }
@@ -744,24 +746,30 @@ mod tests {
 
     #[test]
     fn native_optional_segments_can_be_enabled_saved_and_disabled() {
-        let (id, example) = (SegmentId::PromptCache, "91%");
-        let mut config = ThemePresets::get_default();
-        config.segments.retain(|segment| segment.id != id);
-        let mut app = App::new(config);
-        let index = app.config.segments.iter().position(|s| s.id == id).unwrap();
-        app.selected_segment = index;
-        assert!(!app.config.segments[index].enabled);
-        assert!(!app.preview.get_preview_cache().contains(example));
-        app.toggle_current();
-        assert!(app.preview.get_preview_cache().contains(example));
-        let saved = toml::to_string_pretty(&app.config).unwrap();
-        let mut reopened = App::new(toml::from_str(&saved).unwrap());
-        assert!(reopened.config.segments[index].enabled);
-        reopened.selected_segment = index;
-        reopened.switch_panel();
-        reopened.toggle_current();
-        assert!(!reopened.config.segments[index].enabled);
-        assert!(!reopened.preview.get_preview_cache().contains(example));
+        for (id, example) in [
+            (SegmentId::PromptCache, "91%"),
+            (SegmentId::SessionName, "Fix authentication"),
+            (SegmentId::Worktree, "feature-login"),
+            (SegmentId::PullRequest, "PR #123"),
+        ] {
+            let mut config = ThemePresets::get_default();
+            config.segments.retain(|segment| segment.id != id);
+            let mut app = App::new(config);
+            let index = app.config.segments.iter().position(|s| s.id == id).unwrap();
+            app.selected_segment = index;
+            assert!(!app.config.segments[index].enabled);
+            assert!(!app.preview.get_preview_cache().contains(example));
+            app.toggle_current();
+            assert!(app.preview.get_preview_cache().contains(example));
+            let saved = toml::to_string_pretty(&app.config).unwrap();
+            let mut reopened = App::new(toml::from_str(&saved).unwrap());
+            assert!(reopened.config.segments[index].enabled);
+            reopened.selected_segment = index;
+            reopened.switch_panel();
+            reopened.toggle_current();
+            assert!(!reopened.config.segments[index].enabled);
+            assert!(!reopened.preview.get_preview_cache().contains(example));
+        }
     }
 
     #[test]

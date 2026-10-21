@@ -441,6 +441,9 @@ pub fn collect_all_segments(
             SegmentId::Usage => UsageSegment::new().collect(input),
             SegmentId::Cost => CostSegment::new().collect(input),
             SegmentId::Session => SessionSegment::new().collect(input),
+            SegmentId::SessionName => IdentitySegment::SessionName.collect(input),
+            SegmentId::Worktree => IdentitySegment::Worktree.collect(input),
+            SegmentId::PullRequest => IdentitySegment::PullRequest.collect(input),
             SegmentId::OutputStyle => OutputStyleSegment::new().collect(input),
             SegmentId::Update => {
                 UpdateSegment::new(crate::config::paths::update_state_path()?).collect(input)

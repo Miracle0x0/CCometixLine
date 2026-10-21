@@ -37,6 +37,18 @@ Usage 默认关闭。运行 `ccline --config`，选择 **Usage**，按 **Enter**
 
 重置时间到达时 Claude Code 会重新运行状态栏，但主会话空闲时其他更新事件可能停止。如需在空闲期间让倒计时保持更新，请自行在 `statusLine` 设置中配置 [`refreshInterval`](https://code.claude.com/docs/en/statusline#manually-configure-a-status-line)，例如按分钟显示的倒计时可设为 `"refreshInterval": 60`。ccline 不会添加、修改或删除 `refreshInterval`。
 
+## 会话与仓库标识
+
+**Session Name**、**Worktree** 和 **Pull Request** 是独立段落，所有主题默认关闭。在 `ccline --config` 中启用后按 **S** 保存。它们直接读取[原生状态栏字段](https://code.claude.com/docs/en/statusline#available-data)，不额外查询 Git、GitHub 或 GitLab。
+
+| 段落 / 配置 ID | 数据来源 | 显示内容 |
+| --- | --- | --- |
+| Session Name / `session_name` | `session_name` | `/rename` 或 `--name` 设置的名称，或宿主生成的会话标题 |
+| Worktree / `worktree` | `workspace.git_worktree` | 当前目录所属的 linked Git worktree 名称，也支持在 Claude Code 外创建的工作树 |
+| Pull Request / `pull_request` | `pr.number`、`pr.url`、`pr.kind`、`pr.review_state` | 可点击的 `PR #123` 或 `MR !42`，后接宿主报告的审查状态（若有） |
+
+字段缺失或为 null 时隐藏对应段落。Session Name 独立于 Session 的时长和修改行数；主工作树不显示 Worktree。PR/MR 关闭或合并、宿主不再报告该对象后，Pull Request 随之隐藏，不另行轮询。链接采用 OSC 8，需要终端支持。状态显示为 `approved`、`pending`、`changes requested` 或 `draft`；其中 GitLab 的 `approved` 表示宿主报告为可合并，并不代表 ccline 另外检查过审批。GitHub PR 字段要求 Claude Code 2.1.145+，GitLab MR 字段要求 2.1.234+，`workspace.git_worktree` 要求 2.1.98+。
+
 ## 提示词缓存（Prompt Cache）
 
 Prompt Cache 默认关闭。在 `ccline --config` 中启用 **Prompt Cache**，按 **S** 保存。它读取原生 [`prompt_cache`](https://code.claude.com/docs/en/statusline#prompt-cache-fields) 对象（Claude Code 2.1.251+），不请求 API，也不读取转录文件。

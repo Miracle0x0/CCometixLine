@@ -145,7 +145,7 @@ Displays: `Model | Effort | Directory | Git Branch Status | Context Window`
 - **Effort**: the current reasoning effort level, such as `high`
 - **Context Window**: Claude Code's reported context usage, such as `20% · 200k tokens`; `-` before the first response and right after `/compact`
 
-Optional segments include **Usage** (subscription windows and gateway spend limits, such as `63% · 24% · 2h`), Prompt Cache, Session, Cost, Output Style, and Update. [Segments](docs/segments.md) describes each segment's data, formats, and options. To keep Usage countdowns current while the session is idle, set `refreshInterval` in your `statusLine` setting yourself; ccline does not manage it.
+Optional segments include **Usage** (subscription windows and gateway spend limits, such as `63% · 24% · 2h`), Prompt Cache, Session Name, Worktree, Pull Request, Session, Cost, Output Style, and Update. [Segments](docs/segments.md) describes each segment's data, formats, and options. To keep Usage countdowns current while the session is idle, set `refreshInterval` in your `statusLine` setting yourself; ccline does not manage it.
 
 ## Configuration
 

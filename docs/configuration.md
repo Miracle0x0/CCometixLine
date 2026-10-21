@@ -26,7 +26,7 @@ A missing `config.toml` means the default theme, and a missing `models.toml` mea
 
 ## Segments
 
-All segments are configurable with an enable/disable toggle, icons, colors, background, and text style, and can be reordered with **Shift+Up/Down** in the TUI. Supported segments: Directory, Git, Model, Effort, Agents, Context Window, Prompt Cache, Usage, Session, Cost, Output Style, Update. [Segments](segments.md) describes what each data segment shows.
+All segments are configurable with an enable/disable toggle, icons, colors, background, and text style, and can be reordered with **Shift+Up/Down** in the TUI. Supported segments: Directory, Git, Model, Effort, Agents, Context Window, Prompt Cache, Usage, Session Name, Worktree, Pull Request, Session, Cost, Output Style, Update. [Segments](segments.md) describes what each data segment shows.
 
 ## Model Names (`models.toml`)
 

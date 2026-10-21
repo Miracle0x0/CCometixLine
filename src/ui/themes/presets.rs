@@ -52,14 +52,28 @@ impl ThemePresets {
         segment
     }
 
-    pub fn prompt_cache_segment(theme_name: &str) -> SegmentConfig {
-        let mut segment = Self::directory_palette(theme_name);
-        segment.id = SegmentId::PromptCache;
-        segment.enabled = false;
-        segment.icon.plain = "Cache".into();
-        segment.icon.nerd_font = "\u{f1c0}".into();
-        segment.options.clear();
-        segment
+    /// Optional native data segments share the theme's directory palette.
+    pub fn native_segments(theme_name: &str) -> [SegmentConfig; 4] {
+        [
+            (SegmentId::PromptCache, "Cache", "\u{f1c0}"),
+            (SegmentId::SessionName, "Session", "\u{f075}"),
+            (SegmentId::Worktree, "WT", "\u{f1bb}"),
+            (SegmentId::PullRequest, "↗", "\u{f126}"),
+        ]
+        .map(|(id, plain, nerd_font)| {
+            let mut segment = Self::directory_palette(theme_name);
+            segment.id = id;
+            segment.enabled = false;
+            segment.icon.plain = plain.into();
+            segment.icon.nerd_font = nerd_font.into();
+            segment.options.clear();
+            segment
+        })
+    }
+
+    fn with_native_segments(mut segments: Vec<SegmentConfig>, theme: &str) -> Vec<SegmentConfig> {
+        segments.extend(Self::native_segments(theme));
+        segments
     }
 
     /// Default Effort appearance, independent of the configured Model segment.
@@ -182,19 +196,21 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: " | ".to_string(),
             },
-            segments: vec![
-                theme_cometix::model_segment(),
-                theme_cometix::effort_segment(),
-                theme_cometix::directory_segment(),
-                theme_cometix::git_segment(),
-                theme_cometix::context_window_segment(),
-                theme_cometix::usage_segment(),
-                theme_cometix::cost_segment(),
-                theme_cometix::session_segment(),
-                theme_cometix::output_style_segment(),
-                Self::agents_segment("cometix"),
-                Self::prompt_cache_segment("cometix"),
-            ],
+            segments: Self::with_native_segments(
+                vec![
+                    theme_cometix::model_segment(),
+                    theme_cometix::effort_segment(),
+                    theme_cometix::directory_segment(),
+                    theme_cometix::git_segment(),
+                    theme_cometix::context_window_segment(),
+                    theme_cometix::usage_segment(),
+                    theme_cometix::cost_segment(),
+                    theme_cometix::session_segment(),
+                    theme_cometix::output_style_segment(),
+                    Self::agents_segment("cometix"),
+                ],
+                "cometix",
+            ),
             theme: "cometix".to_string(),
         }
     }
@@ -205,19 +221,21 @@ impl ThemePresets {
                 mode: StyleMode::Plain,
                 separator: " | ".to_string(),
             },
-            segments: vec![
-                theme_default::model_segment(),
-                theme_default::effort_segment(),
-                theme_default::directory_segment(),
-                theme_default::git_segment(),
-                theme_default::context_window_segment(),
-                theme_default::usage_segment(),
-                theme_default::cost_segment(),
-                theme_default::session_segment(),
-                theme_default::output_style_segment(),
-                Self::agents_segment("default"),
-                Self::prompt_cache_segment("default"),
-            ],
+            segments: Self::with_native_segments(
+                vec![
+                    theme_default::model_segment(),
+                    theme_default::effort_segment(),
+                    theme_default::directory_segment(),
+                    theme_default::git_segment(),
+                    theme_default::context_window_segment(),
+                    theme_default::usage_segment(),
+                    theme_default::cost_segment(),
+                    theme_default::session_segment(),
+                    theme_default::output_style_segment(),
+                    Self::agents_segment("default"),
+                ],
+                "default",
+            ),
             theme: "default".to_string(),
         }
     }
@@ -228,19 +246,21 @@ impl ThemePresets {
                 mode: StyleMode::Plain,
                 separator: " │ ".to_string(),
             },
-            segments: vec![
-                theme_minimal::model_segment(),
-                theme_minimal::effort_segment(),
-                theme_minimal::directory_segment(),
-                theme_minimal::git_segment(),
-                theme_minimal::context_window_segment(),
-                theme_minimal::usage_segment(),
-                theme_minimal::cost_segment(),
-                theme_minimal::session_segment(),
-                theme_minimal::output_style_segment(),
-                Self::agents_segment("minimal"),
-                Self::prompt_cache_segment("minimal"),
-            ],
+            segments: Self::with_native_segments(
+                vec![
+                    theme_minimal::model_segment(),
+                    theme_minimal::effort_segment(),
+                    theme_minimal::directory_segment(),
+                    theme_minimal::git_segment(),
+                    theme_minimal::context_window_segment(),
+                    theme_minimal::usage_segment(),
+                    theme_minimal::cost_segment(),
+                    theme_minimal::session_segment(),
+                    theme_minimal::output_style_segment(),
+                    Self::agents_segment("minimal"),
+                ],
+                "minimal",
+            ),
             theme: "minimal".to_string(),
         }
     }
@@ -251,19 +271,21 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: " | ".to_string(),
             },
-            segments: vec![
-                theme_gruvbox::model_segment(),
-                theme_gruvbox::effort_segment(),
-                theme_gruvbox::directory_segment(),
-                theme_gruvbox::git_segment(),
-                theme_gruvbox::context_window_segment(),
-                theme_gruvbox::usage_segment(),
-                theme_gruvbox::cost_segment(),
-                theme_gruvbox::session_segment(),
-                theme_gruvbox::output_style_segment(),
-                Self::agents_segment("gruvbox"),
-                Self::prompt_cache_segment("gruvbox"),
-            ],
+            segments: Self::with_native_segments(
+                vec![
+                    theme_gruvbox::model_segment(),
+                    theme_gruvbox::effort_segment(),
+                    theme_gruvbox::directory_segment(),
+                    theme_gruvbox::git_segment(),
+                    theme_gruvbox::context_window_segment(),
+                    theme_gruvbox::usage_segment(),
+                    theme_gruvbox::cost_segment(),
+                    theme_gruvbox::session_segment(),
+                    theme_gruvbox::output_style_segment(),
+                    Self::agents_segment("gruvbox"),
+                ],
+                "gruvbox",
+            ),
             theme: "gruvbox".to_string(),
         }
     }
@@ -274,19 +296,21 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                theme_nord::model_segment(),
-                theme_nord::effort_segment(),
-                theme_nord::directory_segment(),
-                theme_nord::git_segment(),
-                theme_nord::context_window_segment(),
-                theme_nord::usage_segment(),
-                theme_nord::cost_segment(),
-                theme_nord::session_segment(),
-                theme_nord::output_style_segment(),
-                Self::agents_segment("nord"),
-                Self::prompt_cache_segment("nord"),
-            ],
+            segments: Self::with_native_segments(
+                vec![
+                    theme_nord::model_segment(),
+                    theme_nord::effort_segment(),
+                    theme_nord::directory_segment(),
+                    theme_nord::git_segment(),
+                    theme_nord::context_window_segment(),
+                    theme_nord::usage_segment(),
+                    theme_nord::cost_segment(),
+                    theme_nord::session_segment(),
+                    theme_nord::output_style_segment(),
+                    Self::agents_segment("nord"),
+                ],
+                "nord",
+            ),
             theme: "nord".to_string(),
         }
     }
@@ -297,19 +321,21 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                theme_powerline_dark::model_segment(),
-                theme_powerline_dark::effort_segment(),
-                theme_powerline_dark::directory_segment(),
-                theme_powerline_dark::git_segment(),
-                theme_powerline_dark::context_window_segment(),
-                theme_powerline_dark::usage_segment(),
-                theme_powerline_dark::cost_segment(),
-                theme_powerline_dark::session_segment(),
-                theme_powerline_dark::output_style_segment(),
-                Self::agents_segment("powerline-dark"),
-                Self::prompt_cache_segment("powerline-dark"),
-            ],
+            segments: Self::with_native_segments(
+                vec![
+                    theme_powerline_dark::model_segment(),
+                    theme_powerline_dark::effort_segment(),
+                    theme_powerline_dark::directory_segment(),
+                    theme_powerline_dark::git_segment(),
+                    theme_powerline_dark::context_window_segment(),
+                    theme_powerline_dark::usage_segment(),
+                    theme_powerline_dark::cost_segment(),
+                    theme_powerline_dark::session_segment(),
+                    theme_powerline_dark::output_style_segment(),
+                    Self::agents_segment("powerline-dark"),
+                ],
+                "powerline-dark",
+            ),
             theme: "powerline-dark".to_string(),
         }
     }
@@ -320,19 +346,21 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                theme_powerline_light::model_segment(),
-                theme_powerline_light::effort_segment(),
-                theme_powerline_light::directory_segment(),
-                theme_powerline_light::git_segment(),
-                theme_powerline_light::context_window_segment(),
-                theme_powerline_light::usage_segment(),
-                theme_powerline_light::cost_segment(),
-                theme_powerline_light::session_segment(),
-                theme_powerline_light::output_style_segment(),
-                Self::agents_segment("powerline-light"),
-                Self::prompt_cache_segment("powerline-light"),
-            ],
+            segments: Self::with_native_segments(
+                vec![
+                    theme_powerline_light::model_segment(),
+                    theme_powerline_light::effort_segment(),
+                    theme_powerline_light::directory_segment(),
+                    theme_powerline_light::git_segment(),
+                    theme_powerline_light::context_window_segment(),
+                    theme_powerline_light::usage_segment(),
+                    theme_powerline_light::cost_segment(),
+                    theme_powerline_light::session_segment(),
+                    theme_powerline_light::output_style_segment(),
+                    Self::agents_segment("powerline-light"),
+                ],
+                "powerline-light",
+            ),
             theme: "powerline-light".to_string(),
         }
     }
@@ -343,19 +371,21 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                theme_powerline_rose_pine::model_segment(),
-                theme_powerline_rose_pine::effort_segment(),
-                theme_powerline_rose_pine::directory_segment(),
-                theme_powerline_rose_pine::git_segment(),
-                theme_powerline_rose_pine::context_window_segment(),
-                theme_powerline_rose_pine::usage_segment(),
-                theme_powerline_rose_pine::cost_segment(),
-                theme_powerline_rose_pine::session_segment(),
-                theme_powerline_rose_pine::output_style_segment(),
-                Self::agents_segment("powerline-rose-pine"),
-                Self::prompt_cache_segment("powerline-rose-pine"),
-            ],
+            segments: Self::with_native_segments(
+                vec![
+                    theme_powerline_rose_pine::model_segment(),
+                    theme_powerline_rose_pine::effort_segment(),
+                    theme_powerline_rose_pine::directory_segment(),
+                    theme_powerline_rose_pine::git_segment(),
+                    theme_powerline_rose_pine::context_window_segment(),
+                    theme_powerline_rose_pine::usage_segment(),
+                    theme_powerline_rose_pine::cost_segment(),
+                    theme_powerline_rose_pine::session_segment(),
+                    theme_powerline_rose_pine::output_style_segment(),
+                    Self::agents_segment("powerline-rose-pine"),
+                ],
+                "powerline-rose-pine",
+            ),
             theme: "powerline-rose-pine".to_string(),
         }
     }
@@ -366,19 +396,21 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                theme_powerline_tokyo_night::model_segment(),
-                theme_powerline_tokyo_night::effort_segment(),
-                theme_powerline_tokyo_night::directory_segment(),
-                theme_powerline_tokyo_night::git_segment(),
-                theme_powerline_tokyo_night::context_window_segment(),
-                theme_powerline_tokyo_night::usage_segment(),
-                theme_powerline_tokyo_night::cost_segment(),
-                theme_powerline_tokyo_night::session_segment(),
-                theme_powerline_tokyo_night::output_style_segment(),
-                Self::agents_segment("powerline-tokyo-night"),
-                Self::prompt_cache_segment("powerline-tokyo-night"),
-            ],
+            segments: Self::with_native_segments(
+                vec![
+                    theme_powerline_tokyo_night::model_segment(),
+                    theme_powerline_tokyo_night::effort_segment(),
+                    theme_powerline_tokyo_night::directory_segment(),
+                    theme_powerline_tokyo_night::git_segment(),
+                    theme_powerline_tokyo_night::context_window_segment(),
+                    theme_powerline_tokyo_night::usage_segment(),
+                    theme_powerline_tokyo_night::cost_segment(),
+                    theme_powerline_tokyo_night::session_segment(),
+                    theme_powerline_tokyo_night::output_style_segment(),
+                    Self::agents_segment("powerline-tokyo-night"),
+                ],
+                "powerline-tokyo-night",
+            ),
             theme: "powerline-tokyo-night".to_string(),
         }
     }
@@ -403,20 +435,17 @@ mod tests {
             ThemePresets::get_powerline_tokyo_night(),
         ] {
             config.check().unwrap();
-            let agents: Vec<_> = config
-                .segments
-                .iter()
-                .filter(|s| s.id == SegmentId::Agents)
-                .collect();
-            assert_eq!(agents.len(), 1, "{}", config.theme);
-            assert!(!agents[0].enabled, "{}", config.theme);
-            let caches: Vec<_> = config
-                .segments
-                .iter()
-                .filter(|s| s.id == SegmentId::PromptCache)
-                .collect();
-            assert_eq!(caches.len(), 1, "{}", config.theme);
-            assert!(!caches[0].enabled, "{}", config.theme);
+            for id in [
+                SegmentId::Agents,
+                SegmentId::PromptCache,
+                SegmentId::SessionName,
+                SegmentId::Worktree,
+                SegmentId::PullRequest,
+            ] {
+                let segments: Vec<_> = config.segments.iter().filter(|s| s.id == id).collect();
+                assert_eq!(segments.len(), 1, "{} {id:?}", config.theme);
+                assert!(!segments[0].enabled, "{} {id:?}", config.theme);
+            }
             let mut restored: Config =
                 toml::from_str(&toml::to_string_pretty(&config).unwrap()).unwrap();
             let model = restored

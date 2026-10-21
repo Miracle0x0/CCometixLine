@@ -48,11 +48,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Read Claude Code data from stdin
     let input: InputData = serde_json::from_reader(io::stdin().lock())?;
+    let columns = terminal_columns()?;
     let segments_data = collect_all_segments(&config, &models, &input)?;
-    let statusline = StatusLineGenerator::new(config).generate(segments_data);
+    let statusline = StatusLineGenerator::new(config).generate_with_width(segments_data, columns);
     if !statusline.is_empty() {
         println!("{statusline}");
     }
 
     Ok(())
+}
+
+/// Claude Code supplies the terminal width even though stdout is captured, not a TTY.
+fn terminal_columns() -> Result<Option<usize>, Box<dyn std::error::Error>> {
+    match std::env::var("COLUMNS") {
+        Ok(value) => {
+            let columns = value.parse::<std::num::NonZeroUsize>().map_err(|error| {
+                format!("Invalid COLUMNS {value:?}: expected a positive integer ({error})")
+            })?;
+            Ok(Some(columns.get()))
+        }
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(error) => Err(format!("Cannot read COLUMNS: {error}").into()),
+    }
 }

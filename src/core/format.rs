@@ -1,4 +1,17 @@
 use chrono::{DateTime, Duration, Utc};
+use std::borrow::Cow;
+
+/// Ratatui text has no hyperlink metadata. Remove OSC 8 wrappers while preserving their labels
+/// before ANSI conversion, whose OSC parser only understands BEL-terminated sequences.
+pub(crate) fn without_hyperlinks(text: &str) -> Cow<'_, str> {
+    static LINKS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    LINKS
+        .get_or_init(|| {
+            regex::Regex::new(r"\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)")
+                .expect("valid OSC 8 expression")
+        })
+        .replace_all(text, "")
+}
 
 /// Drop control characters so host-provided text cannot break a rendered row.
 pub(crate) fn printable(text: &str) -> String {

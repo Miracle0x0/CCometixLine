@@ -24,6 +24,12 @@ Rendering reads configuration without changing it. With Agents enabled, the suba
 
 A missing `config.toml` means the default theme, and a missing `models.toml` means the built-in model names. A file that exists but cannot be read or parsed is reported as an error instead of falling back to defaults. This includes a theme file selected with `--theme`: a file in the themes directory takes priority over the built-in theme of the same name, and an unknown theme name is an error.
 
+## Terminal Width
+
+The main status line reads the `COLUMNS` environment variable supplied by Claude Code 2.1.153+. It wraps between complete segments when the next segment and separator would exceed that width, using terminal display cells for Chinese text, combining characters, and emoji. ANSI colors and OSC 8 hyperlinks do not occupy columns. Each row has its own separators and Powerline color transitions; no separator is left at a line break.
+
+The TUI preview uses the same wrapping logic with its available content width. Its preview shows link labels as text; links in the actual status line remain clickable. An individual segment wider than the available width stays intact on its own row, so content is never discarded. With `COLUMNS` unset, such as a direct invocation outside Claude Code, output stays on one line. A set value must be a positive integer; invalid values are reported as errors.
+
 ## Segments
 
 All segments are configurable with an enable/disable toggle, icons, colors, background, and text style, and can be reordered with **Shift+Up/Down** in the TUI. Supported segments: Directory, Git, Model, Effort, Agents, Context Window, Prompt Cache, Usage, Session Name, Worktree, Pull Request, Session, Cost, Output Style, Update. [Segments](segments.md) describes what each data segment shows.

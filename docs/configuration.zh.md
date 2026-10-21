@@ -24,6 +24,12 @@ ccline 从自身运行环境读取 `CLAUDE_CONFIG_DIR`。以 `CLAUDE_CONFIG_DIR=
 
 缺少 `config.toml` 时使用默认主题，缺少 `models.toml` 时使用内置模型名称。文件存在但无法读取或解析时会明确报错，不回退到默认值。这同样适用于 `--theme` 选择的主题文件：主题目录中的文件优先于同名内置主题，未知主题名会报错。
 
+## 终端宽度
+
+主状态栏读取 Claude Code 2.1.153+ 提供的 `COLUMNS` 环境变量。当下一段及分隔符将超出宽度时，在完整段落之间换行。宽度按终端显示列计算，支持中文、组合字符和 emoji；ANSI 颜色及 OSC 8 超链接不占列宽。每行独立生成分隔符和 Powerline 颜色过渡，换行处不遗留分隔符。
+
+TUI 预览按自身可用内容宽度使用同一套换行逻辑。预览显示链接文字，实际状态栏保留可点击链接。单个段落超过可用宽度时独占一行并保留全文，不丢弃内容。未设置 `COLUMNS` 时（例如在 Claude Code 外直接调用），输出保持单行。已设置的值必须为正整数，无效值会明确报错。
+
 ## 段落
 
 所有段落都可以开关，并配置图标、颜色、背景和文字样式；在 TUI 中用 **Shift+Up/Down** 调整顺序。支持的段落：Directory、Git、Model、Effort、Agents、Context Window、Prompt Cache、Usage、Session Name、Worktree、Pull Request、Session、Cost、Output Style、Update。各数据段落的显示内容见[段落说明](segments.zh.md)。

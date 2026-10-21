@@ -55,7 +55,7 @@ Prompt Cache is disabled by default. Enable **Prompt Cache** in `ccline --config
 
 A row such as `Cache 91% · warm · 58m · 2 misses · last: tools_changed` shows the token hit ratio, cache state, time until expiry, and any misses and the host's likely cause of the last miss. The cause requires Claude Code 2.1.260+. These statistics cover the main conversation only, not subagents. The percentage is the fraction of input tokens read from cache, not the fraction of requests that hit the cache.
 
-A null hit ratio displays `?`. `unobserved` means no cache tokens have been reported this session; caching may be disabled or unreported by the provider. Otherwise the state is `warm` or `cold`. The cache becomes cold when its reported expiry passes; only a warm cache with a known expiry shows a countdown. A missing or null object hides the segment. Miss information appears only when the reported count is nonzero. Configure `statusLine.refreshInterval` to update the countdown while idle, as described under [Usage](#idle-refresh).
+A null hit ratio displays `?`. `unobserved` means no cache tokens have been reported this session; caching may be disabled or unreported by the provider. Otherwise the state is `warm` or `cold`. The cache becomes cold when its reported expiry passes; only a warm cache with a known expiry shows a countdown. A missing or null object hides the segment. Miss information appears only when the reported count is nonzero. Configure `statusLine.refreshInterval` to update the countdown while idle, as described under [Usage](#refreshing-while-idle).
 
 ## Effort
 

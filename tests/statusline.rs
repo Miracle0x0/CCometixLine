@@ -17,8 +17,15 @@ fn save_config(dir: &Path, config: &Config) {
 }
 
 fn invoke(dir: &Path, panel: bool, input: &Value) -> Output {
+    invoke_with_columns(dir, panel, input, None)
+}
+
+fn invoke_with_columns(dir: &Path, panel: bool, input: &Value, columns: Option<&str>) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ccometixline"));
-    command.env("CLAUDE_CONFIG_DIR", dir);
+    command.env("CLAUDE_CONFIG_DIR", dir).env_remove("COLUMNS");
+    if let Some(columns) = columns {
+        command.env("COLUMNS", columns);
+    }
     if panel {
         command.arg("--subagent-statusline");
     }
@@ -220,5 +227,38 @@ fn malformed_native_identity_fields_fail_instead_of_rendering_defaults() {
         assert!(!output.status.success(), "{key}");
         assert!(output.stdout.is_empty());
         assert!(!output.stderr.is_empty());
+    }
+}
+
+#[test]
+fn main_statusline_uses_host_columns_and_reports_invalid_widths() {
+    let dir = TestDir::new();
+    let mut config = ThemePresets::get_default();
+    config
+        .segments
+        .retain(|s| matches!(s.id, SegmentId::Model | SegmentId::Effort));
+    save_config(&dir.0, &config);
+    let input = status_input("width");
+    let unlimited = render(&dir.0, false, &input);
+    assert_eq!(unlimited.lines().count(), 1);
+    let narrow = invoke_with_columns(&dir.0, false, &input, Some("12"));
+    assert!(
+        narrow.status.success(),
+        "{}",
+        String::from_utf8_lossy(&narrow.stderr)
+    );
+    let narrow = String::from_utf8(narrow.stdout).unwrap();
+    assert_eq!(narrow.lines().count(), 2);
+    assert!(narrow.contains("Opus 4.6"));
+    assert!(narrow.contains("high"));
+    assert!(!narrow.contains('|'));
+    let wide = invoke_with_columns(&dir.0, false, &input, Some("120"));
+    assert!(wide.status.success());
+    assert_eq!(String::from_utf8(wide.stdout).unwrap(), unlimited);
+    for columns in ["", "0", "-1", "wide"] {
+        let output = invoke_with_columns(&dir.0, false, &input, Some(columns));
+        assert!(!output.status.success(), "{columns:?}");
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("Invalid COLUMNS"));
     }
 }

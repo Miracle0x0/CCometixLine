@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-21
+
+### Added
+- **Prompt Cache**: Optional segment showing native cache hit ratio, warm/cold state, expiry countdown, and miss information
+- **Session and Repository Identity**: Optional Session Name, Worktree, and clickable GitHub PR/GitLab MR segments
+- **Fable Models**: Recognize Fable model names in the main status line and subagent panel
+
+### Changed
+- **Terminal Layout**: Wrap the main status line at segment boundaries using Claude Code's `COLUMNS`, sharing layout logic with the TUI preview
+- **Default Colors**: Give all fourteen built-in segments distinct RGB accents across nine themes, preserving saved configurations and custom colors
+
+### Fixed
+- **Agent Count**: Display `1 Agent running` for a single agent and pluralize larger counts
+- **Preview Links**: Preserve OSC 8 hyperlink labels in the TUI preview
+- **Powerline Colors**: Reset text and background styles at segment boundaries
+
 ## [1.1.3] - 2026-10-14
 
 ### Changed

@@ -8,7 +8,7 @@
 
 ## Main Status Line
 
-The Agents icon and `2 Agents running` appear in the main status line alongside the model and effort. Only `local_agent` entries with status `running` in the latest native panel input are counted; completed, failed, and killed entries are excluded. This is a count of the supplied visible entries, not all running subagents.
+The Agents icon and `1 Agent running` (or `2 Agents running`, etc. for multiple agents) appear in the main status line alongside the model and effort. Only `local_agent` entries with status `running` in the latest native panel input are counted; completed, failed, and killed entries are excluded. This is a count of the supplied visible entries, not all running subagents.
 
 Each panel refresh atomically saves the count and observation time in `<config dir>/ccline/agents/<hex-encoded session ID>.json`. The main status line reads only its own session's snapshot. A missing, zero, or expired count hides the segment without an extra separator or blank line. Read, write, and parse failures are reported as errors.
 

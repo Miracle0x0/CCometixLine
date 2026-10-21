@@ -106,6 +106,12 @@ fn native_panel_feeds_an_inline_count_without_icons_or_blank_lines_in_details() 
         };
         assert!(main.contains(icon));
         assert_eq!(render(&dir.0, false, &status_input("two")), without);
+        panel["tasks"][1]["status"] = json!("completed");
+        panel["tasks"][0]["model"] = json!("claude-fable-5-1");
+        assert!(render(&dir.0, true, &panel).contains("Fable 5.1"));
+        let single = render(&dir.0, false, &input);
+        assert!(single.contains("1 Agent running"), "{single}");
+        assert!(!single.contains("1 Agents running"));
         panel["tasks"] = json!([]);
         assert!(render(&dir.0, true, &panel).is_empty());
         assert_eq!(render(&dir.0, false, &input), without);

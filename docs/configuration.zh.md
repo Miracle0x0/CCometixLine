@@ -30,7 +30,7 @@ ccline 从自身运行环境读取 `CLAUDE_CONFIG_DIR`。以 `CLAUDE_CONFIG_DIR=
 
 ## 模型名称（`models.toml`）
 
-该文件用于自定义模型 ID 的显示名称。Claude 模型（Sonnet、Opus、Haiku）会自动识别并提取版本号，只有覆盖内置名称或使用第三方模型时才需要配置。上下文窗口大小来自 Claude Code 的输入，不在此配置。未知字段会被拒绝。
+该文件用于自定义模型 ID 的显示名称。Claude 模型（Sonnet、Opus、Haiku、Fable）会自动识别并提取版本号，只有覆盖内置名称或使用第三方模型时才需要配置。上下文窗口大小来自 Claude Code 的输入，不在此配置。未知字段会被拒绝。
 
 ```toml
 # 模型条目：按模型 ID 子串匹配

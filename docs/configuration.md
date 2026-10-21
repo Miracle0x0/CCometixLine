@@ -30,7 +30,7 @@ All segments are configurable with an enable/disable toggle, icons, colors, back
 
 ## Model Names (`models.toml`)
 
-This file customizes how model IDs are displayed. Claude models (Sonnet, Opus, Haiku) are automatically recognized with version extraction, so you only need this file for overrides or third-party models. Context window sizes come from Claude Code's input and are not configured here. Unknown fields are rejected.
+This file customizes how model IDs are displayed. Claude models (Sonnet, Opus, Haiku, Fable) are automatically recognized with version extraction, so you only need this file for overrides or third-party models. Context window sizes come from Claude Code's input and are not configured here. Unknown fields are rejected.
 
 ```toml
 # Model entries: simple substring matching on the model ID

@@ -71,8 +71,9 @@ pub fn collect(
 }
 
 pub fn segment_data(running: usize) -> SegmentData {
+    let noun = if running == 1 { "Agent" } else { "Agents" };
     SegmentData {
-        primary: format!("{running} Agents running"),
+        primary: format!("{running} {noun} running"),
         secondary: String::new(),
         metadata: Default::default(),
     }
@@ -112,7 +113,7 @@ mod tests {
         save(&dir.0, &panel, 100).unwrap();
         assert_eq!(
             collect(&dir.0, "s", &config, 100).unwrap().unwrap().primary,
-            "1 Agents running"
+            "1 Agent running"
         );
         for states in [&["running", "running"][..], &["failed"][..], &[][..]] {
             save(&dir.0, &input("s", states), 100).unwrap();

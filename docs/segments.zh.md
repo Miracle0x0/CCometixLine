@@ -59,4 +59,4 @@ options = {}
 
 ## Agents
 
-Agents 段落在模型名称、思考强度所在行显示图标和 `2 Agents running`。数量只统计最近一次原生面板输入中的运行条目，不代表所有子代理。启用后还会为 Claude Code 的子代理面板渲染无图标的文字行。数量缺失、为零或已过期时隐藏该段落；缓存及过期配置见[子代理面板](subagent-panel.zh.md)。
+Agents 段落在模型名称、思考强度所在行显示图标和 `1 Agent running`（多个时为 `2 Agents running` 等）。数量只统计最近一次原生面板输入中的运行条目，不代表所有子代理。启用后还会为 Claude Code 的子代理面板渲染无图标的文字行。数量缺失、为零或已过期时隐藏该段落；缓存及过期配置见[子代理面板](subagent-panel.zh.md)。

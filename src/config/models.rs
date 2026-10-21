@@ -104,6 +104,7 @@ impl ModelConfig {
                 BuiltinModelFamily::new("sonnet", "Sonnet"),
                 BuiltinModelFamily::new("opus", "Opus"),
                 BuiltinModelFamily::new("haiku", "Haiku"),
+                BuiltinModelFamily::new("fable", "Fable"),
             ]
         })
     }
@@ -194,7 +195,7 @@ impl ModelConfig {
              # Context window sizes and usage come from Claude Code's status line input,\n\
              # so they are not configured here.\n\
              #\n\
-             # Claude models are automatically recognized (Sonnet, Opus, Haiku) with\n\
+             # Claude models are automatically recognized (Sonnet, Opus, Haiku, Fable) with\n\
              # version extraction. You only need to add entries here for overrides or\n\
              # third-party models.\n\
              \n\
@@ -228,7 +229,7 @@ impl Default for ModelConfig {
     fn default() -> Self {
         Self {
             // Only third-party models need explicit entries.
-            // Claude models (Sonnet, Opus, Haiku) are handled by built-in regex families.
+            // Claude models (Sonnet, Opus, Haiku, Fable) are handled by built-in regex families.
             model_entries: [
                 ("glm-4.5", "GLM-4.5"),
                 ("kimi-k2-turbo", "Kimi K2 Turbo"),
@@ -269,6 +270,14 @@ mod tests {
             Some("Kimi K2 Turbo")
         );
         assert_eq!(models.get_display_name("unknown[1m]"), None);
+        for (id, name) in [
+            ("claude-fable-5", "Fable 5"),
+            ("claude-fable-5-1", "Fable 5.1"),
+            ("anthropic/claude-fable-5-1[1m]", "Fable 5.1 1M"),
+            ("CLAUDE-FABLE-5-1-20260901", "Fable 5.1"),
+        ] {
+            assert_eq!(models.get_display_name(id).as_deref(), Some(name), "{id}");
+        }
         assert_eq!(
             models.get_display_suffix("unknown[1m]").as_deref(),
             Some(" 1M")

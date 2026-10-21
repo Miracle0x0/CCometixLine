@@ -34,6 +34,8 @@ TUI 预览按自身可用内容宽度使用同一套换行逻辑。预览显示�
 
 所有段落都可以开关，并配置图标、颜色、背景和文字样式；在 TUI 中用 **Shift+Up/Down** 调整顺序。支持的段落：Directory、Git、Model、Effort、Agents、Context Window、Prompt Cache、Usage、Session Name、Worktree、Pull Request、Session、Cost、Output Style、Update。各数据段落的显示内容见[段落说明](segments.zh.md)。
 
+内置主题为各段落分配独立的 RGB 主色，图标和文字使用同一主色。Default 和 Cometix 使用明亮配色，Minimal 降低饱和度，Gruvbox、Nord、Rose Pine 和 Tokyo Night 保留各自的冷暖色调。有背景的主题为每段配上同色系的淡色底；Powerline Light 使用深色文字和浅色背景。Agents 的主状态栏数量和面板行使用独立橙色。已保存在 `config.toml` 和主题文件中的颜色保持原样，新配色用于新初始化的主题文件以及 TUI 补入的缺失段落。
+
 ## 模型名称（`models.toml`）
 
 该文件用于自定义模型 ID 的显示名称。Claude 模型（Sonnet、Opus、Haiku、Fable）会自动识别并提取版本号，只有覆盖内置名称或使用第三方模型时才需要配置。上下文窗口大小来自 Claude Code 的输入，不在此配置。未知字段会被拒绝。

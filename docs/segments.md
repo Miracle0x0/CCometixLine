@@ -70,7 +70,7 @@ If your configuration or selected theme does not contain Effort, the TUI present
 id = "effort"
 enabled = true
 icon = { plain = "⚡", nerd_font = "\uf0e7" }
-colors = { icon = { c16 = 13 }, text = { c16 = 13 } }
+colors = { icon = { r = 189, g = 147, b = 249 }, text = { r = 189, g = 147, b = 249 } }
 styles = { text_bold = false }
 options = {}
 ```

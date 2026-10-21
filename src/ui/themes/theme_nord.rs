@@ -1,6 +1,5 @@
-use crate::config::{
-    AnsiColor, ColorConfig, IconConfig, SegmentConfig, SegmentId, TextStyleConfig,
-};
+use super::palette::Palette;
+use crate::config::{IconConfig, SegmentConfig, SegmentId, TextStyleConfig};
 use std::collections::HashMap;
 
 pub fn model_segment() -> SegmentConfig {
@@ -11,23 +10,7 @@ pub fn model_segment() -> SegmentConfig {
             plain: "🤖".to_string(),
             nerd_font: "\u{e26d}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 136,
-                g: 192,
-                b: 208,
-            }),
-        },
+        colors: Palette::Nord.colors(SegmentId::Model),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -41,23 +24,7 @@ pub fn effort_segment() -> SegmentConfig {
             plain: "⚡".to_string(),
             nerd_font: "\u{f0e7}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 59,
-                g: 47,
-                b: 73,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 59,
-                g: 47,
-                b: 73,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 180,
-                g: 142,
-                b: 173,
-            }),
-        },
+        colors: Palette::Nord.colors(SegmentId::Effort),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -71,23 +38,7 @@ pub fn directory_segment() -> SegmentConfig {
             plain: "📁".to_string(),
             nerd_font: "\u{f024b}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 163,
-                g: 190,
-                b: 140,
-            }),
-        },
+        colors: Palette::Nord.colors(SegmentId::Directory),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -101,23 +52,7 @@ pub fn git_segment() -> SegmentConfig {
             plain: "🌿".to_string(),
             nerd_font: "\u{f02a2}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 129,
-                g: 161,
-                b: 193,
-            }),
-        },
+        colors: Palette::Nord.colors(SegmentId::Git),
         styles: TextStyleConfig::default(),
         options: {
             let mut opts = HashMap::new();
@@ -135,23 +70,7 @@ pub fn context_window_segment() -> SegmentConfig {
             plain: "⚡️".to_string(),
             nerd_font: "\u{f49b}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 180,
-                g: 142,
-                b: 173,
-            }),
-        },
+        colors: Palette::Nord.colors(SegmentId::ContextWindow),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -165,23 +84,7 @@ pub fn cost_segment() -> SegmentConfig {
             plain: "💰".to_string(),
             nerd_font: "\u{eec1}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 235,
-                g: 203,
-                b: 139,
-            }), // Nord yellow background
-        },
+        colors: Palette::Nord.colors(SegmentId::Cost),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -195,23 +98,7 @@ pub fn session_segment() -> SegmentConfig {
             plain: "⏱️".to_string(),
             nerd_font: "\u{f19bb}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 163,
-                g: 190,
-                b: 140,
-            }), // Nord green background
-        },
+        colors: Palette::Nord.colors(SegmentId::Session),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -225,23 +112,7 @@ pub fn output_style_segment() -> SegmentConfig {
             plain: "🎯".to_string(),
             nerd_font: "\u{f12f5}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 136,
-                g: 192,
-                b: 208,
-            }), // Nord cyan background
-        },
+        colors: Palette::Nord.colors(SegmentId::OutputStyle),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -255,23 +126,7 @@ pub fn usage_segment() -> SegmentConfig {
             plain: "📊".to_string(),
             nerd_font: "\u{f0a9e}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 46,
-                g: 52,
-                b: 64,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 235,
-                g: 203,
-                b: 139,
-            }), // Nord yellow background
-        },
+        colors: Palette::Nord.colors(SegmentId::Usage),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }

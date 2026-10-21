@@ -1,6 +1,5 @@
-use crate::config::{
-    AnsiColor, ColorConfig, IconConfig, SegmentConfig, SegmentId, TextStyleConfig,
-};
+use super::palette::Palette;
+use crate::config::{IconConfig, SegmentConfig, SegmentId, TextStyleConfig};
 use std::collections::HashMap;
 
 pub fn model_segment() -> SegmentConfig {
@@ -11,23 +10,7 @@ pub fn model_segment() -> SegmentConfig {
             plain: "🤖".to_string(),
             nerd_font: "\u{e26d}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 235,
-                g: 188,
-                b: 186,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 235,
-                g: 188,
-                b: 186,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 25,
-                g: 23,
-                b: 36,
-            }),
-        },
+        colors: Palette::RosePine.colors(SegmentId::Model),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -41,23 +24,7 @@ pub fn effort_segment() -> SegmentConfig {
             plain: "⚡".to_string(),
             nerd_font: "\u{f0e7}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 196,
-                g: 167,
-                b: 231,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 196,
-                g: 167,
-                b: 231,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 42,
-                g: 35,
-                b: 64,
-            }),
-        },
+        colors: Palette::RosePine.colors(SegmentId::Effort),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -71,23 +38,7 @@ pub fn directory_segment() -> SegmentConfig {
             plain: "📁".to_string(),
             nerd_font: "\u{f024b}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 196,
-                g: 167,
-                b: 231,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 196,
-                g: 167,
-                b: 231,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 38,
-                g: 35,
-                b: 58,
-            }),
-        },
+        colors: Palette::RosePine.colors(SegmentId::Directory),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -101,23 +52,7 @@ pub fn git_segment() -> SegmentConfig {
             plain: "🌿".to_string(),
             nerd_font: "\u{f02a2}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 156,
-                g: 207,
-                b: 216,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 156,
-                g: 207,
-                b: 216,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 31,
-                g: 29,
-                b: 46,
-            }),
-        },
+        colors: Palette::RosePine.colors(SegmentId::Git),
         styles: TextStyleConfig::default(),
         options: {
             let mut opts = HashMap::new();
@@ -135,23 +70,7 @@ pub fn context_window_segment() -> SegmentConfig {
             plain: "⚡️".to_string(),
             nerd_font: "\u{f49b}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 224,
-                g: 222,
-                b: 244,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 224,
-                g: 222,
-                b: 244,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 82,
-                g: 79,
-                b: 103,
-            }),
-        },
+        colors: Palette::RosePine.colors(SegmentId::ContextWindow),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -165,23 +84,7 @@ pub fn cost_segment() -> SegmentConfig {
             plain: "💰".to_string(),
             nerd_font: "\u{eec1}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 246,
-                g: 193,
-                b: 119,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 246,
-                g: 193,
-                b: 119,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 35,
-                g: 33,
-                b: 54,
-            }), // Rose Pine dark background
-        },
+        colors: Palette::RosePine.colors(SegmentId::Cost),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -195,23 +98,7 @@ pub fn session_segment() -> SegmentConfig {
             plain: "⏱️".to_string(),
             nerd_font: "\u{f19bb}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 156,
-                g: 207,
-                b: 216,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 156,
-                g: 207,
-                b: 216,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 42,
-                g: 39,
-                b: 63,
-            }), // Rose Pine darker background
-        },
+        colors: Palette::RosePine.colors(SegmentId::Session),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -225,23 +112,7 @@ pub fn output_style_segment() -> SegmentConfig {
             plain: "🎯".to_string(),
             nerd_font: "\u{f12f5}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 49,
-                g: 116,
-                b: 143,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 49,
-                g: 116,
-                b: 143,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 38,
-                g: 35,
-                b: 58,
-            }), // Rose Pine darkest background
-        },
+        colors: Palette::RosePine.colors(SegmentId::OutputStyle),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -255,23 +126,7 @@ pub fn usage_segment() -> SegmentConfig {
             plain: "📊".to_string(),
             nerd_font: "\u{f0a9e}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 246,
-                g: 193,
-                b: 119,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 246,
-                g: 193,
-                b: 119,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 35,
-                g: 33,
-                b: 54,
-            }),
-        },
+        colors: Palette::RosePine.colors(SegmentId::Usage),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }

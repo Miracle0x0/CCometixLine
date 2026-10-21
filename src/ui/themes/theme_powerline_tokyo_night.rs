@@ -1,6 +1,5 @@
-use crate::config::{
-    AnsiColor, ColorConfig, IconConfig, SegmentConfig, SegmentId, TextStyleConfig,
-};
+use super::palette::Palette;
+use crate::config::{IconConfig, SegmentConfig, SegmentId, TextStyleConfig};
 use std::collections::HashMap;
 
 pub fn model_segment() -> SegmentConfig {
@@ -11,23 +10,7 @@ pub fn model_segment() -> SegmentConfig {
             plain: "🤖".to_string(),
             nerd_font: "\u{e26d}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 252,
-                g: 167,
-                b: 234,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 252,
-                g: 167,
-                b: 234,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 25,
-                g: 27,
-                b: 41,
-            }),
-        },
+        colors: Palette::TokyoNight.colors(SegmentId::Model),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -41,23 +24,7 @@ pub fn effort_segment() -> SegmentConfig {
             plain: "⚡".to_string(),
             nerd_font: "\u{f0e7}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 187,
-                g: 154,
-                b: 247,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 187,
-                g: 154,
-                b: 247,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 49,
-                g: 38,
-                b: 69,
-            }),
-        },
+        colors: Palette::TokyoNight.colors(SegmentId::Effort),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -71,23 +38,7 @@ pub fn directory_segment() -> SegmentConfig {
             plain: "📁".to_string(),
             nerd_font: "\u{f024b}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 130,
-                g: 170,
-                b: 255,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 130,
-                g: 170,
-                b: 255,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 47,
-                g: 51,
-                b: 77,
-            }),
-        },
+        colors: Palette::TokyoNight.colors(SegmentId::Directory),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -101,23 +52,7 @@ pub fn git_segment() -> SegmentConfig {
             plain: "🌿".to_string(),
             nerd_font: "\u{f02a2}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 195,
-                g: 232,
-                b: 141,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 195,
-                g: 232,
-                b: 141,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 30,
-                g: 32,
-                b: 48,
-            }),
-        },
+        colors: Palette::TokyoNight.colors(SegmentId::Git),
         styles: TextStyleConfig::default(),
         options: {
             let mut opts = HashMap::new();
@@ -135,23 +70,7 @@ pub fn context_window_segment() -> SegmentConfig {
             plain: "⚡️️".to_string(),
             nerd_font: "\u{f49b}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 192,
-                g: 202,
-                b: 245,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 192,
-                g: 202,
-                b: 245,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 61,
-                g: 89,
-                b: 161,
-            }),
-        },
+        colors: Palette::TokyoNight.colors(SegmentId::ContextWindow),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -165,23 +84,7 @@ pub fn cost_segment() -> SegmentConfig {
             plain: "💰".to_string(),
             nerd_font: "\u{eec1}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 224,
-                g: 175,
-                b: 104,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 224,
-                g: 175,
-                b: 104,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 36,
-                g: 40,
-                b: 59,
-            }), // Tokyo Night dark background
-        },
+        colors: Palette::TokyoNight.colors(SegmentId::Cost),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -195,23 +98,7 @@ pub fn session_segment() -> SegmentConfig {
             plain: "⏱️".to_string(),
             nerd_font: "\u{f1ad3}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 158,
-                g: 206,
-                b: 106,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 158,
-                g: 206,
-                b: 106,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 41,
-                g: 46,
-                b: 66,
-            }), // Tokyo Night darker background
-        },
+        colors: Palette::TokyoNight.colors(SegmentId::Session),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -225,23 +112,7 @@ pub fn output_style_segment() -> SegmentConfig {
             plain: "🎯".to_string(),
             nerd_font: "\u{f12f5}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 125,
-                g: 207,
-                b: 255,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 125,
-                g: 207,
-                b: 255,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 32,
-                g: 35,
-                b: 52,
-            }), // Tokyo Night darkest background
-        },
+        colors: Palette::TokyoNight.colors(SegmentId::OutputStyle),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }
@@ -255,23 +126,7 @@ pub fn usage_segment() -> SegmentConfig {
             plain: "📊".to_string(),
             nerd_font: "\u{f0a9e}".to_string(),
         },
-        colors: ColorConfig {
-            icon: Some(AnsiColor::Rgb {
-                r: 224,
-                g: 175,
-                b: 104,
-            }),
-            text: Some(AnsiColor::Rgb {
-                r: 224,
-                g: 175,
-                b: 104,
-            }),
-            background: Some(AnsiColor::Rgb {
-                r: 36,
-                g: 40,
-                b: 59,
-            }),
-        },
+        colors: Palette::TokyoNight.colors(SegmentId::Usage),
         styles: TextStyleConfig::default(),
         options: HashMap::new(),
     }

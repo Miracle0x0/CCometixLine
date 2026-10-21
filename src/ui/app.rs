@@ -761,9 +761,20 @@ mod tests {
             assert!(!app.preview.get_preview_cache().contains(example));
             app.toggle_current();
             assert!(app.preview.get_preview_cache().contains(example));
+            app.config.segments[index].colors.text = Some(AnsiColor::Rgb {
+                r: 12,
+                g: 34,
+                b: 56,
+            });
+            app.config.segments[index].colors.background = Some(AnsiColor::Color256 { c256: 234 });
+            let custom_colors = serde_json::to_value(&app.config.segments[index].colors).unwrap();
             let saved = toml::to_string_pretty(&app.config).unwrap();
             let mut reopened = App::new(toml::from_str(&saved).unwrap());
             assert!(reopened.config.segments[index].enabled);
+            assert_eq!(
+                serde_json::to_value(&reopened.config.segments[index].colors).unwrap(),
+                custom_colors
+            );
             reopened.selected_segment = index;
             reopened.switch_panel();
             reopened.toggle_current();

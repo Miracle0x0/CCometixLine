@@ -1,3 +1,4 @@
+mod palette;
 pub mod presets;
 pub mod theme_cometix;
 pub mod theme_default;

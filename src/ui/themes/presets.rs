@@ -1,6 +1,9 @@
+use super::palette::Palette;
 // Theme presets for TUI configuration
 
-use crate::config::{paths, Config, SegmentConfig, SegmentId, StyleConfig, StyleMode};
+use crate::config::{
+    paths, Config, IconConfig, SegmentConfig, SegmentId, StyleConfig, StyleMode, TextStyleConfig,
+};
 
 // Import all theme modules
 use super::{
@@ -23,28 +26,37 @@ impl ThemePresets {
         "powerline-tokyo-night",
     ];
 
-    fn directory_palette(theme_name: &str) -> SegmentConfig {
+    fn palette(theme_name: &str) -> Palette {
         match theme_name {
-            "cometix" => theme_cometix::directory_segment(),
-            "gruvbox" => theme_gruvbox::directory_segment(),
-            "minimal" => theme_minimal::directory_segment(),
-            "nord" => theme_nord::directory_segment(),
-            "powerline-dark" => theme_powerline_dark::directory_segment(),
-            "powerline-light" => theme_powerline_light::directory_segment(),
-            "powerline-rose-pine" => theme_powerline_rose_pine::directory_segment(),
-            "powerline-tokyo-night" => theme_powerline_tokyo_night::directory_segment(),
-            _ => theme_default::directory_segment(),
+            "minimal" => Palette::Minimal,
+            "gruvbox" => Palette::Gruvbox,
+            "nord" => Palette::Nord,
+            "powerline-dark" => Palette::PowerlineDark,
+            "powerline-light" => Palette::PowerlineLight,
+            "powerline-rose-pine" => Palette::RosePine,
+            "powerline-tokyo-night" => Palette::TokyoNight,
+            // The default and cometix themes, and new segments added to a custom theme.
+            _ => Palette::Default,
         }
     }
 
-    /// Agents is opt-in in every theme and uses the theme's directory palette.
+    fn optional_segment(theme: &str, id: SegmentId, plain: &str, nerd_font: &str) -> SegmentConfig {
+        SegmentConfig {
+            id,
+            enabled: false,
+            icon: IconConfig {
+                plain: plain.into(),
+                nerd_font: nerd_font.into(),
+            },
+            colors: Self::palette(theme).colors(id),
+            styles: TextStyleConfig::default(),
+            options: Default::default(),
+        }
+    }
+
+    /// Agents is opt-in and has its own accent, also used by its text-only panel rows.
     pub fn agents_segment(theme_name: &str) -> SegmentConfig {
-        let mut segment = Self::directory_palette(theme_name);
-        segment.id = SegmentId::Agents;
-        segment.enabled = false;
-        segment.icon.plain = "&".into();
-        segment.icon.nerd_font = "\u{f0c0}".into();
-        segment.options.clear();
+        let mut segment = Self::optional_segment(theme_name, SegmentId::Agents, "&", "\u{f0c0}");
         segment.options.insert(
             "summary_ttl_seconds".into(),
             crate::agents::summary::DEFAULT_TTL_SECONDS.into(),
@@ -52,7 +64,7 @@ impl ThemePresets {
         segment
     }
 
-    /// Optional native data segments share the theme's directory palette.
+    /// Optional native data segments each use an independent theme accent.
     pub fn native_segments(theme_name: &str) -> [SegmentConfig; 4] {
         [
             (SegmentId::PromptCache, "Cache", "\u{f1c0}"),
@@ -60,15 +72,7 @@ impl ThemePresets {
             (SegmentId::Worktree, "WT", "\u{f1bb}"),
             (SegmentId::PullRequest, "↗", "\u{f126}"),
         ]
-        .map(|(id, plain, nerd_font)| {
-            let mut segment = Self::directory_palette(theme_name);
-            segment.id = id;
-            segment.enabled = false;
-            segment.icon.plain = plain.into();
-            segment.icon.nerd_font = nerd_font.into();
-            segment.options.clear();
-            segment
-        })
+        .map(|(id, plain, nerd_font)| Self::optional_segment(theme_name, id, plain, nerd_font))
     }
 
     fn with_native_segments(mut segments: Vec<SegmentConfig>, theme: &str) -> Vec<SegmentConfig> {

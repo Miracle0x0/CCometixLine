@@ -34,6 +34,8 @@ The TUI preview uses the same wrapping logic with its available content width. I
 
 All segments are configurable with an enable/disable toggle, icons, colors, background, and text style, and can be reordered with **Shift+Up/Down** in the TUI. Supported segments: Directory, Git, Model, Effort, Agents, Context Window, Prompt Cache, Usage, Session Name, Worktree, Pull Request, Session, Cost, Output Style, Update. [Segments](segments.md) describes what each data segment shows.
 
+Built-in themes give each segment its own RGB accent, shared by its icon and text. Default and Cometix use bright accents, Minimal uses softer colors, and Gruvbox, Nord, Rose Pine, and Tokyo Night retain their warm or cool palette character. Themes with backgrounds use a subtle tint of each segment's accent; Powerline Light pairs dark text with light backgrounds. Agents has an independent orange accent for both its main-line count and panel rows. Saved colors in `config.toml` and theme files are preserved; these defaults apply to newly initialized theme files and missing segments added in the TUI.
+
 ## Model Names (`models.toml`)
 
 This file customizes how model IDs are displayed. Claude models (Sonnet, Opus, Haiku, Fable) are automatically recognized with version extraction, so you only need this file for overrides or third-party models. Context window sizes come from Claude Code's input and are not configured here. Unknown fields are rejected.

@@ -1,3 +1,4 @@
+pub(crate) mod format;
 pub mod segments;
 pub mod statusline;
 

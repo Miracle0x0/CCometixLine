@@ -437,6 +437,7 @@ pub fn collect_all_segments(
                 GitSegment::new().with_sha(show_sha).collect(input)
             }
             SegmentId::ContextWindow => ContextWindowSegment::new().collect(input),
+            SegmentId::PromptCache => PromptCacheSegment.collect(input),
             SegmentId::Usage => UsageSegment::new().collect(input),
             SegmentId::Cost => CostSegment::new().collect(input),
             SegmentId::Session => SessionSegment::new().collect(input),

@@ -37,6 +37,14 @@ Usage 默认关闭。运行 `ccline --config`，选择 **Usage**，按 **Enter**
 
 重置时间到达时 Claude Code 会重新运行状态栏，但主会话空闲时其他更新事件可能停止。如需在空闲期间让倒计时保持更新，请自行在 `statusLine` 设置中配置 [`refreshInterval`](https://code.claude.com/docs/en/statusline#manually-configure-a-status-line)，例如按分钟显示的倒计时可设为 `"refreshInterval": 60`。ccline 不会添加、修改或删除 `refreshInterval`。
 
+## 提示词缓存（Prompt Cache）
+
+Prompt Cache 默认关闭。在 `ccline --config` 中启用 **Prompt Cache**，按 **S** 保存。它读取原生 [`prompt_cache`](https://code.claude.com/docs/en/statusline#prompt-cache-fields) 对象（Claude Code 2.1.251+），不请求 API，也不读取转录文件。
+
+例如 `Cache 91% · warm · 58m · 2 misses · last: tools_changed`，依次表示 token 命中比例、缓存状态、到期倒计时，以及未命中次数和宿主诊断的最近一次未命中的可能原因。原因字段需要 Claude Code 2.1.260+。统计仅覆盖主会话，不包含子代理；百分比表示输入 token 中从缓存读取的比例，不是请求命中率。
+
+命中比例为 null 时显示 `?`。`unobserved` 表示本会话尚未报告缓存 token，可能未启用缓存，也可能供应商未报告；其余情况显示 `warm` 或 `cold`。宿主报告的到期时间经过后显示 `cold`，仅在缓存为 warm 且到期时间已知时显示倒计时。对象缺失或为 null 时隐藏段落；未命中次数非零时才显示未命中信息。空闲时的倒计时刷新沿用 Usage 的 [`statusLine.refreshInterval`](#空闲时刷新) 设置。
+
 ## 思考强度（Effort）
 
 显示 `effort.level` 报告的当前推理工作量档位，例如 `low`、`medium`、`high`、`xhigh` 或 `max`。要求 Claude Code 2.1.119 或更新版本；输入没有 `effort` 字段时省略该段落。ccline 不会根据模型名称、thinking 设置或 token 用量推断档位。所有内置主题默认在 Model 后启用 Effort。

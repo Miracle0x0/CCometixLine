@@ -37,6 +37,14 @@ If no window and no spend limit is present, the segment is hidden.
 
 Claude Code re-runs the status line when a reset time passes, but its other update events can go quiet while the main session is idle. To keep the countdown current during idle periods, set [`refreshInterval`](https://code.claude.com/docs/en/statusline#manually-configure-a-status-line) in your `statusLine` setting yourself, for example `"refreshInterval": 60` for minute-level countdowns. ccline never adds, changes, or removes `refreshInterval`.
 
+## Prompt Cache
+
+Prompt Cache is disabled by default. Enable **Prompt Cache** in `ccline --config` and press **S** to save. It reads the native [`prompt_cache`](https://code.claude.com/docs/en/statusline#prompt-cache-fields) object (Claude Code 2.1.251+); it makes no API requests and reads no transcript files.
+
+A row such as `Cache 91% · warm · 58m · 2 misses · last: tools_changed` shows the token hit ratio, cache state, time until expiry, and any misses and the host's likely cause of the last miss. The cause requires Claude Code 2.1.260+. These statistics cover the main conversation only, not subagents. The percentage is the fraction of input tokens read from cache, not the fraction of requests that hit the cache.
+
+A null hit ratio displays `?`. `unobserved` means no cache tokens have been reported this session; caching may be disabled or unreported by the provider. Otherwise the state is `warm` or `cold`. The cache becomes cold when its reported expiry passes; only a warm cache with a known expiry shows a countdown. A missing or null object hides the segment. Miss information appears only when the reported count is nonzero. Configure `statusLine.refreshInterval` to update the countdown while idle, as described under [Usage](#idle-refresh).
+
 ## Effort
 
 Shows the current reasoning effort level reported in `effort.level`, such as `low`, `medium`, `high`, `xhigh`, or `max`. Requires Claude Code 2.1.119 or later. The segment is omitted when the input has no `effort` field. ccline does not infer the level from model names, thinking settings, or token usage. All built-in themes enable Effort after Model.

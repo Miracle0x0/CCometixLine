@@ -1,6 +1,7 @@
 use super::{Segment, SegmentData};
 use crate::config::{InputData, SegmentId, SpendLimit, SpendPeriod};
-use chrono::{DateTime, Duration, Utc};
+use crate::core::format::format_reset_time;
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -21,22 +22,6 @@ impl UsageSegment {
             p if p < 76.0 => "\u{f0aa3}", // circle_slice_6
             p if p < 88.0 => "\u{f0aa4}", // circle_slice_7
             _ => "\u{f0aa5}",             // circle_slice_8
-        }
-    }
-
-    fn format_reset_time(reset_at: Option<DateTime<Utc>>, now: DateTime<Utc>) -> String {
-        let Some(reset_at) = reset_at else {
-            return "?".to_string();
-        };
-        let remaining = reset_at.signed_duration_since(now);
-        if remaining <= Duration::zero() {
-            "?".to_string()
-        } else if remaining.num_days() > 0 {
-            format!("{}d", remaining.num_days())
-        } else if remaining.num_hours() > 0 {
-            format!("{}h", remaining.num_hours())
-        } else {
-            format!("{}m", remaining.num_minutes())
         }
     }
 }
@@ -75,7 +60,7 @@ impl UsageSegment {
             (None, Some(period)) => text.push_str(&format!(" · {period}")),
             (None, None) => {}
         }
-        (text, Self::format_reset_time(Some(spend.resets_at), now))
+        (text, format_reset_time(Some(spend.resets_at), now))
     }
 }
 
@@ -114,7 +99,7 @@ impl Segment for UsageSegment {
                 );
                 (
                     format!("{}%", window.used_percentage.round()),
-                    format!("· {}", Self::format_reset_time(window.resets_at, now)),
+                    format!("· {}", format_reset_time(window.resets_at, now)),
                 )
             }
             None => ("?%".to_string(), "· ?".to_string()),
@@ -155,6 +140,7 @@ mod tests {
     use crate::config::{Config, ModelConfig, StyleMode};
     use crate::core::{collect_all_segments, StatusLineGenerator};
     use crate::ui::themes::ThemePresets;
+    use chrono::Duration;
     use serde_json::{json, Value};
 
     use crate::core::segments::test_payload as payload;
@@ -308,11 +294,11 @@ mod tests {
             (259200, "3d"),
         ] {
             assert_eq!(
-                UsageSegment::format_reset_time(Some(now + Duration::seconds(seconds)), now),
+                format_reset_time(Some(now + Duration::seconds(seconds)), now),
                 expected
             );
         }
-        assert_eq!(UsageSegment::format_reset_time(None, now), "?");
+        assert_eq!(format_reset_time(None, now), "?");
         for epoch in [-1, 0] {
             let input = input(json!({"five_hour": {"used_percentage": 24.0, "resets_at": epoch}}));
             assert_eq!(

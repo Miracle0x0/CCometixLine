@@ -141,6 +141,11 @@ impl PreviewComponent {
                         map
                     },
                 },
+                SegmentId::PromptCache => SegmentData {
+                    primary: "91%".into(),
+                    secondary: "· warm · 58m · 2 misses · last: tools_changed".into(),
+                    metadata: HashMap::new(),
+                },
                 SegmentId::Usage => SegmentData {
                     primary: "63% · 24%".to_string(),
                     secondary: "· 2h".to_string(),

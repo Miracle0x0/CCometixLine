@@ -70,11 +70,31 @@ pub enum SegmentId {
     Directory,
     Git,
     ContextWindow,
+    PromptCache,
     Usage,
     Cost,
     Session,
     OutputStyle,
     Update,
+}
+
+impl SegmentId {
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Model => "Model",
+            Self::Effort => "Effort",
+            Self::Agents => "Agents",
+            Self::Directory => "Directory",
+            Self::Git => "Git",
+            Self::ContextWindow => "Context Window",
+            Self::PromptCache => "Prompt Cache",
+            Self::Usage => "Usage",
+            Self::Cost => "Cost",
+            Self::Session => "Session",
+            Self::OutputStyle => "Output Style",
+            Self::Update => "Update",
+        }
+    }
 }
 
 // Legacy compatibility structure
@@ -176,6 +196,23 @@ pub struct ContextWindow {
     pub current_usage: Option<CurrentUsage>,
 }
 
+/// Main-conversation prompt cache statistics reported by Claude Code.
+#[derive(Debug, Deserialize)]
+pub struct PromptCache {
+    pub warm: bool,
+    pub caching_observed: bool,
+    pub hit_ratio: Option<f64>,
+    #[serde(default, with = "chrono::serde::ts_seconds_option")]
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub misses: u64,
+    pub last_miss_cause: Option<CacheMissCause>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CacheMissCause {
+    pub causes: Vec<String>,
+}
+
 #[derive(Deserialize)]
 pub struct InputData {
     pub session_id: String,
@@ -186,6 +223,7 @@ pub struct InputData {
     pub cost: Option<Cost>,
     pub output_style: Option<OutputStyle>,
     pub rate_limits: Option<RateLimits>,
+    pub prompt_cache: Option<PromptCache>,
 }
 
 impl Config {

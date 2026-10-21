@@ -3,8 +3,9 @@
 //! Claude Code sends the visible rows on stdin and replaces each row whose `id` ccline writes
 //! back; see https://code.claude.com/docs/en/statusline#subagent-status-lines.
 
-use super::{format_elapsed, printable};
+use super::format_elapsed;
 use crate::config::{Config, ModelConfig, SegmentId};
+use crate::core::format::printable;
 use crate::core::segments::context_window::format_tokens;
 use crate::core::statusline::{visible_width, StatusLineGenerator};
 use serde::{Deserialize, Serialize};

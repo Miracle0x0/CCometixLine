@@ -10,11 +10,6 @@ mod tests;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-/// Drop control characters so host-provided text cannot break a rendered row.
-pub fn printable(text: &str) -> String {
-    text.chars().filter(|c| !c.is_control()).collect()
-}
-
 /// Elapsed seconds as `42s` or `1m05s`.
 pub fn format_elapsed(seconds: u64) -> String {
     if seconds < 60 {

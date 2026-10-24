@@ -1,4 +1,4 @@
-use super::palette::Palette;
+use super::palette::{AgentStatusColors, Palette};
 // Theme presets for TUI configuration
 
 use crate::config::{
@@ -26,7 +26,7 @@ impl ThemePresets {
         "powerline-tokyo-night",
     ];
 
-    fn palette(theme_name: &str) -> Palette {
+    pub(super) fn palette(theme_name: &str) -> Palette {
         match theme_name {
             "minimal" => Palette::Minimal,
             "gruvbox" => Palette::Gruvbox,
@@ -54,9 +54,13 @@ impl ThemePresets {
         }
     }
 
-    /// Agents is opt-in and has its own accent, also used by its text-only panel rows.
+    pub(crate) fn agent_status_colors(theme_name: &str) -> AgentStatusColors {
+        Self::palette(theme_name).agent_status_colors()
+    }
+
+    /// Agents is opt-in; its accent styles the count and the body of native panel rows.
     pub fn agents_segment(theme_name: &str) -> SegmentConfig {
-        let mut segment = Self::optional_segment(theme_name, SegmentId::Agents, "&", "\u{f0c0}");
+        let mut segment = Self::optional_segment(theme_name, SegmentId::Agents, "&", "\u{f007}");
         segment.options.insert(
             "summary_ttl_seconds".into(),
             crate::agents::summary::DEFAULT_TTL_SECONDS.into(),

@@ -798,7 +798,7 @@ mod tests {
             .position(|s| s.id == SegmentId::Agents)
             .unwrap();
         assert!(!app.config.agents_enabled());
-        assert!(!app.preview.get_preview_cache().contains("Agents running"));
+        assert!(!app.preview.get_preview_cache().contains("Agents"));
         assert!(screen(&mut app, 120, 40).contains("Agents"));
         let mut unchanged = app.config.clone();
         unchanged.segments.retain(|s| s.id != SegmentId::Agents);
@@ -807,7 +807,15 @@ mod tests {
         app.toggle_current();
         assert!(app.config.agents_enabled());
         assert_ne!(app.preview.get_preview_cache(), before);
-        assert!(app.preview.get_preview_cache().contains("2 Agents running"));
+        assert!(app.preview.get_preview_cache().contains("2 Agents"));
+        assert!(app
+            .preview
+            .get_preview_cache()
+            .contains("Inspect configuration"));
+        assert!(app.preview.get_preview_cache().contains("[!] failed"));
+        let rendered = screen(&mut app, 120, 40);
+        assert!(rendered.contains("Inspect configuration"), "{rendered}");
+        assert!(rendered.contains("[!] failed"), "{rendered}");
         assert!(app
             .status_message
             .as_ref()

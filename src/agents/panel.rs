@@ -8,6 +8,7 @@ use crate::config::{Config, ModelConfig, SegmentId};
 use crate::core::format::printable;
 use crate::core::segments::context_window::format_tokens;
 use crate::core::statusline::{visible_width, StatusLineGenerator};
+use crate::ui::themes::ThemePresets;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -49,8 +50,9 @@ pub struct PanelRow {
     pub content: String,
 }
 
-/// One row per task, styled with the Agents segment's text color and bold setting. Without an enabled
-/// Agents segment nothing is written, so Claude Code keeps its default rows.
+/// Replace only row bodies: the host keeps the tree connectors, indentation, status bullets and
+/// selection controls. The status field has a semantic color; the rest uses the Agents text style.
+/// Without an enabled Agents segment nothing is written, so the host keeps its default rows.
 pub fn rows(input: &PanelInput, config: &Config, now: u64, models: &ModelConfig) -> Vec<PanelRow> {
     let Some(segment) = config
         .segments
@@ -60,55 +62,69 @@ pub fn rows(input: &PanelInput, config: &Config, now: u64, models: &ModelConfig)
         return Vec::new();
     };
     let renderer = StatusLineGenerator::new(config.clone());
-    let render = |fields: &[String]| renderer.render_text(segment, &fields.join(" · "));
+    let colors = ThemePresets::agent_status_colors(&config.theme);
+    let mut status_style = segment.clone();
     input
         .tasks
         .iter()
-        .map(|task| PanelRow {
-            id: task.id.clone(),
-            content: fit(task, now, models, input.columns, &render),
+        .map(|task| {
+            let (mark, color) = match task.status.as_str() {
+                "running" => (">", &colors.running),
+                "completed" => ("+", &colors.completed),
+                "failed" => ("!", &colors.failed),
+                "killed" => ("x", &colors.killed),
+                _ => ("?", &colors.unknown),
+            };
+            let state = if task.status == "running" {
+                format_elapsed(now.saturating_sub(task.start_time / 1000))
+            } else {
+                printable(&task.status)
+            };
+            let fields = fit(task, format!("[{mark}] {state}"), models, input.columns);
+            status_style.colors.text = Some(color.clone());
+            let mut content =
+                renderer.render_text(segment, &format!("{} · {} · ", fields[0], fields[1]));
+            content.push_str(&renderer.render_text(&status_style, &fields[2]));
+            if fields.len() > 3 {
+                content.push_str(
+                    &renderer.render_text(segment, &format!(" · {}", fields[3..].join(" · "))),
+                );
+            }
+            PanelRow {
+                id: task.id.clone(),
+                content,
+            }
         })
         .collect()
 }
 
 /// Drop trailing details (effort, model, tokens), then shorten the label, until the row fits.
-fn fit(
-    task: &PanelTask,
-    now: u64,
-    models: &ModelConfig,
-    columns: usize,
-    render: &dyn Fn(&[String]) -> String,
-) -> String {
+fn fit(task: &PanelTask, state: String, models: &ModelConfig, columns: usize) -> Vec<String> {
     let name = task
         .agent_type
         .as_deref()
         .or(task.name.as_deref())
         .unwrap_or(&task.kind);
-    let state = if task.status == "running" {
-        format_elapsed(now.saturating_sub(task.start_time / 1000))
-    } else {
-        printable(&task.status)
-    };
     let mut fields = vec![printable(name), printable(&task.label), state];
     let details = details(task, models);
     for count in (0..=details.len()).rev() {
         let mut candidate = fields.clone();
         candidate.extend_from_slice(&details[..count]);
-        let row = render(&candidate);
+        let row = candidate.join(" · ");
         if visible_width(&row) <= columns {
-            return row;
+            return candidate;
         }
     }
     let label: Vec<char> = fields[1].chars().collect();
     for length in (0..label.len()).rev() {
         fields[1] = label[..length].iter().chain(['…'].iter()).collect();
-        let row = render(&fields);
+        let row = fields.join(" · ");
         if visible_width(&row) <= columns {
-            return row;
+            return fields;
         }
     }
     // Nothing shorter is meaningful; the host clips what remains.
-    render(&fields)
+    fields
 }
 
 fn details(task: &PanelTask, models: &ModelConfig) -> Vec<String> {

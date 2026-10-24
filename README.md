@@ -157,10 +157,10 @@ Optional segments include **Usage** (subscription windows and gateway spend limi
 
 ## Subagent Panel
 
-Enable **Agents** in `ccline --config` and press **S** to install `ccline --subagent-statusline` as Claude Code's [`subagentStatusLine`](https://code.claude.com/docs/en/statusline#subagent-status-lines). ccline then renders each row of the subagent panel below the prompt:
+Enable **Agents** in `ccline --config` and press **S** to install `ccline --subagent-statusline` as Claude Code's [`subagentStatusLine`](https://code.claude.com/docs/en/statusline#subagent-status-lines). The main status line shows `1 Agent` or `2 Agents`. Below the prompt, Claude Code keeps its native tree indentation and status bullets while ccline renders each row body with a colored status field:
 
 ```text
-Explore · find config loading · 1m20s · 12.4k (6%) · Sonnet 5.5 · high
+Explore · find config loading · [>] 1m20s · 12.4k (6%) · Sonnet 5.5 · high
 ```
 
 An existing `subagentStatusLine` that ccline did not write is reported as a conflict and left unchanged. See [Subagent Panel](docs/subagent-panel.md) for the row fields, width handling, ownership rules, and migration from the removed hooks and Mod backends.

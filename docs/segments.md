@@ -79,4 +79,4 @@ Set `enabled = false` to hide Effort.
 
 ## Agents
 
-The Agents segment shows its icon and `1 Agent running` (or `2 Agents running`, etc. for multiple agents) alongside the model and effort. The count covers running entries in the latest native panel input, not all subagents. Enabling it also installs text-only rows for Claude Code's subagent panel. Missing, zero, or expired counts hide the segment; see [Subagent Panel](subagent-panel.md) for the cache and expiry setting.
+The Agents segment shows its icon and `1 Agent` (or `2 Agents`, etc. for multiple agents) alongside the model and effort. The count covers running entries in the latest native panel input, not all subagents. Enabling it also styles the native subagent tree's row bodies, with colored status markers and elapsed times. Claude Code supplies the tree's indentation and status bullets. Missing, zero, or expired counts hide the segment; see [Subagent Panel](subagent-panel.md) for the row styles, cache, and expiry setting.

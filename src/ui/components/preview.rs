@@ -1,6 +1,8 @@
-use crate::config::{Config, SegmentId};
+use crate::agents::panel::{self, Effort, PanelInput, PanelTask};
+use crate::config::{Config, ModelConfig, SegmentId};
 use crate::core::segments::SegmentData;
 use crate::core::StatusLineGenerator;
+use ansi_to_tui::IntoText;
 use ratatui::{
     layout::Rect,
     text::{Line, Text},
@@ -47,7 +49,7 @@ impl PreviewComponent {
         let preview_result = renderer.generate_for_tui_preview(segments_data, content_width);
 
         // Convert to owned text by cloning the spans
-        let owned_lines: Vec<Line<'static>> = preview_result
+        let mut owned_lines: Vec<Line<'static>> = preview_result
             .lines
             .into_iter()
             .map(|line| {
@@ -59,6 +61,33 @@ impl PreviewComponent {
                 Line::from(owned_spans)
             })
             .collect();
+
+        if config.agents_enabled() {
+            for row in panel::rows(
+                &sample_panel(usize::from(content_width)),
+                config,
+                180,
+                &ModelConfig::default(),
+            ) {
+                self.preview_cache.push('\n');
+                self.preview_cache.push_str(&row.content);
+                let text = row
+                    .content
+                    .as_bytes()
+                    .into_text()
+                    .expect("valid panel ANSI");
+                owned_lines.extend(text.lines.into_iter().map(|line| {
+                    Line::from(
+                        line.spans
+                            .into_iter()
+                            .map(|span| {
+                                ratatui::text::Span::styled(span.content.into_owned(), span.style)
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                }));
+            }
+        }
 
         self.preview_text = Text::from(owned_lines);
     }
@@ -216,5 +245,33 @@ impl PreviewComponent {
         }
 
         segments_data
+    }
+}
+
+/// Preview row bodies only; native tree prefixes belong to Claude Code's layout.
+fn sample_panel(columns: usize) -> PanelInput {
+    PanelInput {
+        session_id: "preview".into(),
+        columns,
+        tasks: [
+            ("explore", "Explore", "Inspect configuration", "running"),
+            ("plan", "Plan", "Plan the changes", "running"),
+            ("review", "reviewer", "Check error handling", "failed"),
+        ]
+        .into_iter()
+        .map(|(id, agent_type, label, status)| PanelTask {
+            id: id.into(),
+            name: None,
+            kind: "local_agent".into(),
+            agent_type: Some(agent_type.into()),
+            status: status.into(),
+            label: label.into(),
+            start_time: 100_000,
+            model: Some("claude-sonnet-4-6".into()),
+            effort: Some(Effort::Level("high".into())),
+            context_window_size: Some(200_000),
+            token_count: 12_400,
+        })
+        .collect(),
     }
 }

@@ -157,10 +157,10 @@ ccline --theme my-custom-theme
 
 ## 子代理面板
 
-在 `ccline --config` 中启用 **Agents** 并按 **S**，ccline 会把 `ccline --subagent-statusline` 安装为 Claude Code 的 [`subagentStatusLine`](https://code.claude.com/docs/en/statusline#subagent-status-lines)，并渲染提示符下方子代理面板的每一行：
+在 `ccline --config` 中启用 **Agents** 并按 **S**，ccline 会把 `ccline --subagent-statusline` 安装为 Claude Code 的 [`subagentStatusLine`](https://code.claude.com/docs/en/statusline#subagent-status-lines)。主状态栏显示 `1 Agent` 或 `2 Agents`；提示符下方保留 Claude Code 原生树的缩进和状态圆点，由 ccline 渲染带颜色状态字段的行正文：
 
 ```text
-Explore · find config loading · 1m20s · 12.4k (6%) · Sonnet 5.5 · high
+Explore · find config loading · [>] 1m20s · 12.4k (6%) · Sonnet 5.5 · high
 ```
 
 已有且不是 ccline 写入的 `subagentStatusLine` 会被报告为配置冲突并保持不变。行字段、宽度处理、所有权规则以及从已移除的 Hooks 和 Mod 后端迁移，见[子代理面板](docs/subagent-panel.zh.md)。

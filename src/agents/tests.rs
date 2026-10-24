@@ -168,14 +168,13 @@ mod panel_rows {
     use crate::core::statusline::visible_width;
     use crate::test_support::panel_task as task;
     use crate::ui::themes::ThemePresets;
+    use ansi_to_tui::IntoText;
+    use ratatui::style::{Color, Modifier};
     use serde_json::json;
 
     fn config(theme: &str, enabled: bool) -> Config {
         // Built-in presets only: the user's theme files must not affect tests.
-        let mut config = match theme {
-            "default" => ThemePresets::get_default(),
-            _ => ThemePresets::get_powerline_dark(),
-        };
+        let mut config = ThemePresets::builtin(theme).unwrap();
         for segment in &mut config.segments {
             if segment.id == SegmentId::Agents {
                 segment.enabled = enabled;
@@ -192,8 +191,19 @@ mod panel_rows {
         rows(&input, config, 180, &ModelConfig::default())
     }
 
+    fn plain(content: &str) -> String {
+        content
+            .as_bytes()
+            .into_text()
+            .unwrap()
+            .lines
+            .iter()
+            .flat_map(|line| line.spans.iter().map(|span| span.content.as_ref()))
+            .collect()
+    }
+
     #[test]
-    fn rows_show_every_field_without_icons_padding_backgrounds_or_blank_lines() {
+    fn rows_style_status_separately_and_leave_native_tree_prefixes_to_the_host() {
         for theme in ["default", "powerline-dark"] {
             let mut config = config(theme, true);
             let segment = config
@@ -207,10 +217,69 @@ mod panel_rows {
             assert_eq!(rows.len(), 1);
             assert_eq!(rows[0].id, "t1");
             assert_eq!(
-                rows[0].content,
-                "\x1b[1;33mExplore · 查找配置加载 · 1m20s · 12.4k (6%) · custom-model · high\x1b[0m",
+                plain(&rows[0].content),
+                "Explore · 查找配置加载 · [>] 1m20s · 12.4k (6%) · custom-model · high",
                 "{theme}"
             );
+            let text = rows[0].content.as_bytes().into_text().unwrap();
+            assert_eq!(text.lines.len(), 1);
+            for span in &text.lines[0].spans {
+                assert!(span.style.add_modifier.contains(Modifier::BOLD));
+                assert!(matches!(span.style.bg, None | Some(Color::Reset)));
+                if span.content.contains("[>]") {
+                    assert_ne!(span.style.fg, Some(Color::Yellow));
+                } else {
+                    assert_eq!(span.style.fg, Some(Color::Yellow));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn states_keep_their_meaning_and_unknown_states_remain_visible() {
+        let config = config("default", true);
+        for (state, expected, color) in [
+            ("running", "[>] 1m20s", Color::Rgb(255, 173, 102)),
+            ("completed", "[+] completed", Color::Rgb(144, 216, 120)),
+            ("failed", "[!] failed", Color::Rgb(255, 128, 139)),
+            ("killed", "[x] killed", Color::Rgb(165, 181, 197)),
+            ("waiting", "[?] waiting", Color::Rgb(232, 199, 90)),
+            ("idle", "[?] idle", Color::Rgb(232, 199, 90)),
+            ("new_state", "[?] new_state", Color::Rgb(232, 199, 90)),
+        ] {
+            let mut input = task();
+            input["status"] = json!(state);
+            let row = render(&config, 500, vec![input]).remove(0);
+            let text = row.content.as_bytes().into_text().unwrap();
+            let status = text.lines[0]
+                .spans
+                .iter()
+                .find(|span| span.content == expected)
+                .unwrap_or_else(|| panic!("missing {expected}: {text:?}"));
+            assert_eq!(status.style.fg, Some(color), "{state}");
+            assert!(!plain(&row.content).contains("approval"));
+        }
+    }
+
+    #[test]
+    fn row_ids_and_host_order_are_preserved_without_synthesizing_a_tree() {
+        let config = config("default", true);
+        let tasks: Vec<_> = ["child-z", "parent-a", "sibling-m"]
+            .into_iter()
+            .map(|id| {
+                let mut value = task();
+                value["id"] = json!(id);
+                value
+            })
+            .collect();
+        let rows = render(&config, 80, tasks);
+        assert_eq!(
+            rows.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            ["child-z", "parent-a", "sibling-m"]
+        );
+        for row in rows {
+            assert!(plain(&row.content).starts_with("Explore · "));
+            assert!(!row.content.contains(['\r', '\n']));
         }
     }
 
@@ -234,7 +303,25 @@ mod panel_rows {
         let short = render(&config, base + 3, vec![task()]).remove(0).content;
         assert!(short.contains("查…"), "{short:?}");
         assert!(visible_width(&short) <= base + 3);
-        assert!(minimal.contains("Explore · … · 1m20s"), "{minimal:?}");
+        assert!(
+            plain(&minimal).contains("Explore · … · [>] 1m20s"),
+            "{minimal:?}"
+        );
+    }
+
+    #[test]
+    fn status_markers_and_unicode_text_are_included_in_the_width_budget() {
+        let config = config("powerline-light", true);
+        let mut input = task();
+        input["label"] = json!("检查配置 e\u{301} 👩‍💻 and the remaining files");
+        let full = render(&config, 500, vec![input.clone()]).remove(0).content;
+        for columns in 26..=visible_width(&full) {
+            let row = render(&config, columns, vec![input.clone()])
+                .remove(0)
+                .content;
+            assert!(visible_width(&row) <= columns, "{columns}: {row:?}");
+            assert!(plain(&row).contains("[>] 1m20s"));
+        }
     }
 
     #[test]
@@ -249,7 +336,7 @@ mod panel_rows {
         }
         let row = render(&config, 500, vec![failed.clone()]).remove(0).content;
         assert!(
-            row.contains("scout · abc · failed · 12.4k · 8k budget"),
+            plain(&row).contains("scout · abc · [!] failed · 12.4k · 8k budget"),
             "{row:?}"
         );
         failed.as_object_mut().unwrap().remove("name");

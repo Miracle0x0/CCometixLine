@@ -62,7 +62,7 @@ fn status_input(session: &str) -> Value {
 }
 
 #[test]
-fn native_panel_feeds_an_inline_count_without_icons_or_blank_lines_in_details() {
+fn native_panel_preserves_row_bodies_and_feeds_a_compact_main_count() {
     let escapes = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
     for mut config in [
         ThemePresets::get_default(),
@@ -81,24 +81,29 @@ fn native_panel_feeds_an_inline_count_without_icons_or_blank_lines_in_details() 
         save_config(&dir.0, &config);
         let input = status_input("one");
         let without = render(&dir.0, false, &input);
-        assert!(!without.contains("Agents running"));
+        assert!(!without.contains("Agents"));
         let mut panel = json!({"session_id":"one","columns":500,"tasks":[panel_task(), panel_task(), panel_task()]});
         panel["tasks"][1]["id"] = json!("t2");
         panel["tasks"][2]["id"] = json!("t3");
         panel["tasks"][2]["status"] = json!("failed");
         let details = render(&dir.0, true, &panel);
         assert_eq!(details.lines().count(), 3);
-        for line in details.lines() {
+        for (index, line) in details.lines().enumerate() {
             let row: Value = serde_json::from_str(line).unwrap();
             let content = row["content"].as_str().unwrap();
             let plain = escapes.replace_all(content, "");
             assert!(plain.starts_with("Explore · "), "{plain}");
+            assert_eq!(row["id"], panel["tasks"][index]["id"]);
+            assert!(
+                plain.contains(if index == 2 { "[!] failed" } else { "[>]" }),
+                "{plain}"
+            );
             assert!(!content.contains(['\r', '\n']));
         }
         let main = render(&dir.0, false, &input);
         assert_eq!(main.lines().count(), 1);
         assert!(
-            main.contains("Opus 4.6") && main.contains("high") && main.contains("2 Agents running"),
+            main.contains("Opus 4.6") && main.contains("high") && main.contains("2 Agents"),
             "{main:?}"
         );
         let agents = config
@@ -111,14 +116,19 @@ fn native_panel_feeds_an_inline_count_without_icons_or_blank_lines_in_details() 
         } else {
             &agents.icon.nerd_font
         };
-        assert!(main.contains(icon));
+        let plain_main = escapes.replace_all(&main, "");
+        assert!(
+            plain_main.contains(&format!("{icon} 2 Agents")),
+            "{plain_main}"
+        );
+        assert!(!plain_main.contains("running"));
         assert_eq!(render(&dir.0, false, &status_input("two")), without);
         panel["tasks"][1]["status"] = json!("completed");
         panel["tasks"][0]["model"] = json!("claude-fable-5-1");
         assert!(render(&dir.0, true, &panel).contains("Fable 5.1"));
         let single = render(&dir.0, false, &input);
-        assert!(single.contains("1 Agent running"), "{single}");
-        assert!(!single.contains("1 Agents running"));
+        assert!(single.contains("1 Agent"), "{single}");
+        assert!(!single.contains("1 Agents"));
         panel["tasks"] = json!([]);
         assert!(render(&dir.0, true, &panel).is_empty());
         assert_eq!(render(&dir.0, false, &input), without);

@@ -13,7 +13,38 @@ pub(super) enum Palette {
     TokyoNight,
 }
 
+/// Semantic colors for the status field in native subagent rows.
+pub(crate) struct AgentStatusColors {
+    pub running: AnsiColor,
+    pub completed: AnsiColor,
+    pub failed: AnsiColor,
+    pub killed: AnsiColor,
+    pub unknown: AnsiColor,
+}
+
 impl Palette {
+    pub(super) fn agent_status_colors(self) -> AgentStatusColors {
+        // Running, completed, failed, killed, unknown. Rows have no background of their own.
+        let colors = match self {
+            Self::Default => [0xffad66, 0x90d878, 0xff808b, 0xa5b5c5, 0xe8c75a],
+            Self::Minimal => [0xd6aa80, 0x9fbe8c, 0xd98f94, 0x9ca7b6, 0xcbb781],
+            Self::Gruvbox => [0xfea054, 0xb8bb26, 0xfb7c68, 0xa89984, 0xfabd2f],
+            Self::Nord => [0xdca77b, 0xa3be8c, 0xee9ba4, 0xb0bac8, 0xebcb8b],
+            Self::PowerlineDark => [0xffaf70, 0x93d17c, 0xf28688, 0xa7b4c7, 0xe8c66a],
+            Self::PowerlineLight => [0xa14b0b, 0x3b7029, 0xb02e43, 0x536278, 0x82610c],
+            Self::RosePine => [0xeaab86, 0xa6c89a, 0xeb8a9b, 0xa5a1bb, 0xf6c177],
+            Self::TokyoNight => [0xffa86c, 0x9ece6a, 0xf7768e, 0x9aa5ce, 0xe0af68],
+        };
+        let [running, completed, failed, killed, unknown] = colors.map(rgb);
+        AgentStatusColors {
+            running,
+            completed,
+            failed,
+            killed,
+            unknown,
+        }
+    }
+
     pub(super) fn colors(self, id: SegmentId) -> ColorConfig {
         // Model, effort, agents, directory, git, context, cache, usage, cost, duration,
         // output style, session name, worktree, pull request, update.
@@ -144,6 +175,32 @@ mod tests {
                 let (fg, bg) = (luminance(text), luminance(&background));
                 let ratio = (fg.max(bg) + 0.05) / (fg.min(bg) + 0.05);
                 assert!(ratio >= 4.5, "{name} {:?}: contrast {ratio:.2}", segment.id);
+            }
+        }
+    }
+
+    #[test]
+    fn agent_status_colors_are_distinct_and_readable_on_each_theme_surface() {
+        for name in ThemePresets::BUILTIN_THEMES {
+            let palette = ThemePresets::palette(name);
+            let colors = palette.agent_status_colors();
+            let background = palette.surface().unwrap_or(0x1e1e2e);
+            let bg = luminance(&rgb(background));
+            let mut seen = HashSet::new();
+            for color in [
+                colors.running,
+                colors.completed,
+                colors.failed,
+                colors.killed,
+                colors.unknown,
+            ] {
+                assert!(
+                    seen.insert(serde_json::to_string(&color).unwrap()),
+                    "{name}"
+                );
+                let fg = luminance(&color);
+                let ratio = (fg.max(bg) + 0.05) / (fg.min(bg) + 0.05);
+                assert!(ratio >= 4.5, "{name}: status contrast {ratio:.2}");
             }
         }
     }

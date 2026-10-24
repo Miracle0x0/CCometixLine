@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-10-24
+
+### Added
+- **Agent Preview**: Show sample subagent row bodies in the TUI preview using the same renderer as the native panel
+
+### Changed
+- **Agent Rows**: Add theme-aware status colors and markers while preserving Claude Code's native tree indentation, status bullets, and layout
+- **Agent Count**: Shorten main status line labels to `1 Agent` / `2 Agents` and use a single-user Nerd Font icon
+
 ## [1.2.0] - 2026-10-21
 
 ### Added
